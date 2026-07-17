@@ -28,6 +28,7 @@ function modalidadIcon(mod) {
 const InscripcionModal = ({ evento, onClose }) => {
   const [nombre, setNombre] = u3State('');
   const [email, setEmail] = u3State('');
+  const [dni, setDni] = u3State('');
   const [estado, setEstado] = u3State('form'); // form | enviando | ok | error
   const [resp, setResp] = u3State(null);
   const [msg, setMsg] = u3State('');
@@ -35,9 +36,10 @@ const InscripcionModal = ({ evento, onClose }) => {
   const submit = async (e) => {
     e.preventDefault();
     if (!nombre.trim() || !email.trim()) { setMsg('Ingresa tu nombre y correo'); return; }
+    if (dni && dni.length !== 8) { setMsg('El DNI debe tener 8 dígitos'); return; }
     setEstado('enviando'); setMsg('');
     try {
-      const r = await API().post('asistencias', 'registrar', { evento_id: evento.id, nombre, email, metodo: 'FORM' });
+      const r = await API().post('asistencias', 'registrar', { evento_id: evento.id, nombre, email, dni, metodo: 'FORM' });
       if (r && r.ok) { setResp(r.data); setEstado('ok'); }
       else { setMsg((r && r.error) || 'No se pudo registrar'); setEstado('error'); }
     } catch (err) { setMsg(String(err)); setEstado('error'); }
@@ -70,6 +72,7 @@ const InscripcionModal = ({ evento, onClose }) => {
             <form onSubmit={submit} className="grid gap-4 mt-6">
               <div className="field"><label>Nombre completo</label><input className="input" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Tu nombre" /></div>
               <div className="field"><label>Correo electrónico</label><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tucorreo@ejemplo.com" /></div>
+              <div className="field"><label>DNI <span style={{ color: 'var(--fg-muted)', fontWeight: 400 }}>(recomendado: valida tu asistencia y certificado)</span></label><input className="input" inputMode="numeric" maxLength={8} value={dni} onChange={(e) => setDni(e.target.value.replace(/\D/g, ''))} placeholder="12345678" /></div>
               {msg && <div className="small" style={{ color: '#C8102E' }}>{msg}</div>}
               <button type="submit" className="btn btn-primary" disabled={estado === 'enviando'}>
                 {estado === 'enviando' ? 'Registrando…' : 'Confirmar inscripción'}
@@ -388,6 +391,7 @@ const EvaluacionPublica = ({ token }) => {
   const [estado, setEstado] = u3State('cargando'); // cargando|error|form|enviando|result
   const [test, setTest] = u3State(null);
   const [email, setEmail] = u3State('');
+  const [dniTest, setDniTest] = u3State('');
   const [resp, setResp] = u3State({});
   const [msg, setMsg] = u3State('');
   const [res, setRes] = u3State(null);
@@ -404,7 +408,7 @@ const EvaluacionPublica = ({ token }) => {
     if (!email.trim()) { setMsg('Ingresa el correo con el que te inscribiste'); return; }
     setMsg(''); setEstado('enviando');
     try {
-      const r = await API().post('evaluaciones', 'submit', { token, email, respuestas: JSON.stringify(resp) });
+      const r = await API().post('evaluaciones', 'submit', { token, email, dni: dniTest, respuestas: JSON.stringify(resp) });
       if (r && r.ok) { setRes(r.data); setEstado('result'); }
       else { setMsg((r && r.error) || 'No se pudo enviar'); setEstado('form'); }
     } catch (err) { setMsg(String(err)); setEstado('form'); }
@@ -435,7 +439,10 @@ const EvaluacionPublica = ({ token }) => {
       <h1 className="serif mt-2" style={{ fontSize: 'clamp(26px,4vw,38px)', lineHeight: 1.1 }}>{test.titulo}</h1>
       {test.descripcion && <p className="mt-2" style={{ color: 'var(--fg-muted)' }}>{test.descripcion}</p>}
       <form onSubmit={submit} className="card mt-6" style={{ padding: '28px 26px' }}>
-        <div className="field"><label>Correo (el de tu inscripción) *</label><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+        <div className="grid col-2 gap-4">
+          <div className="field"><label>Correo (el de tu inscripción) *</label><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+          <div className="field"><label>DNI <span style={{ color: 'var(--fg-muted)', fontWeight: 400 }}>(opcional)</span></label><input className="input" inputMode="numeric" maxLength={8} value={dniTest} onChange={(e) => setDniTest(e.target.value.replace(/\D/g, ''))} placeholder="12345678" /></div>
+        </div>
         <div className="grid gap-5 mt-6">
           {test.preguntas.map((q, i) => {
             const opciones = ['opcion_a', 'opcion_b', 'opcion_c', 'opcion_d'].map((k, j) => ({ letra: LETRAS[j], texto: q[k] })).filter((o) => o.texto);

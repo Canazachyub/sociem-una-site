@@ -157,8 +157,34 @@ const AdminEventos = ({ toast }) => {
   const [items, setItems] = u4.useState(null);
   const [ed, setEd] = u4.useState(null);
   const [asis, setAsis] = u4.useState(null);
+  const [lista, setLista] = u4.useState(''); // DNI o correo para pasar lista
+  const [marcando, setMarcando] = u4.useState(false);
   const load = () => aApi.get('eventos', 'list').then(r => setItems(r.items || r.data || [])).catch(e => toast.push(e.message,'error'));
   u4.useEffect(() => { load(); }, []);
+  const recargarAsis = async (ev) => {
+    const r = await aApi.get('eventos','conAsistencia',{ id: ev.id });
+    setAsis({ ev, ...r.data });
+  };
+  // Pasar lista: marca entrada (1) o salida (2) por DNI o correo.
+  const checkin = async (fase) => {
+    const valor = lista.trim();
+    if (!valor) { toast.push('Escribe un DNI o un correo', 'error'); return; }
+    setMarcando(true);
+    try {
+      const esDni = /^\d{6,}$/.test(valor);
+      const r = await aApi.post('asistencias', 'checkin', { evento_id: asis.ev.id, [esDni ? 'dni' : 'email']: valor, fase: String(fase) });
+      toast.push(`${fase === 1 ? 'Entrada' : 'Salida'} marcada: ${r.data.nombre || valor}`, 'ok');
+      setLista('');
+      await recargarAsis(asis.ev);
+    } catch (e) { toast.push(e.message, 'error'); }
+    setMarcando(false);
+  };
+  const toggleVal = async (a, fase) => {
+    try {
+      await aApi.post('asistencias', 'toggleValidacion', { id: a.id, fase: String(fase) });
+      await recargarAsis(asis.ev);
+    } catch (e) { toast.push(e.message, 'error'); }
+  };
   const save = async () => {
     if (!ed.titulo || !ed.fecha) { toast.push('Título y fecha requeridos','error'); return; }
     try { await aApi.post('eventos', ed.id ? 'update' : 'create', ed); toast.push('Guardado','ok'); setEd(null); load(); }
@@ -231,18 +257,31 @@ const AdminEventos = ({ toast }) => {
         )}
       </AM>
 
-      <AM open={!!asis} onClose={() => setAsis(null)} title={asis ? 'Asistencia · ' + asis.ev.titulo : ''} wide>
+      <AM open={!!asis} onClose={() => { setAsis(null); setLista(''); }} title={asis ? 'Asistencia · ' + asis.ev.titulo : ''} wide>
         {asis && (
           <>
-            <div className="small mb-4" style={{ color:'var(--fg-muted)' }}>{asis.total} asistente(s) registrados.</div>
+            {/* Pasar lista: DNI o correo → marcar entrada/salida. Si no estaba
+                inscrito pero existe en personas, se registra al vuelo. */}
+            <div className="card mb-4" style={{ padding:'14px 16px', background:'var(--bg-soft)' }}>
+              <div className="mono small" style={{ color:'var(--violet-600)' }}>PASAR LISTA</div>
+              <div className="flex gap-2 mt-2" style={{ flexWrap:'wrap' }}>
+                <input className="input" style={{ flex:'1 1 220px' }} placeholder="DNI o correo del asistente"
+                  value={lista} onChange={e => setLista(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); checkin(1); } }} autoFocus />
+                <button className="btn btn-primary" disabled={marcando} onClick={() => checkin(1)}><Icon name="check" size={14} /> Entrada</button>
+                <button className="btn btn-gold" disabled={marcando} onClick={() => checkin(2)}><Icon name="logout" size={14} /> Salida</button>
+              </div>
+              <div className="small mt-2" style={{ color:'var(--fg-muted)' }}>Enter = marcar entrada. Con ambas validaciones en ✓ el certificado queda habilitado.</div>
+            </div>
+            <div className="small mb-4" style={{ color:'var(--fg-muted)' }}>{asis.total} asistente(s) registrados. Haz clic en Val.1 / Val.2 para corregir a mano.</div>
             <table className="admin-table">
-              <thead><tr><th>Nombre</th><th>Correo</th><th>Val.1</th><th>Val.2</th><th>Cert.</th></tr></thead>
+              <thead><tr><th>Nombre</th><th>Correo</th><th>DNI</th><th>Val.1</th><th>Val.2</th><th>Cert.</th></tr></thead>
               <tbody>
-                {asis.asistentes.length === 0 && <tr><td colSpan={5} style={{ color:'var(--fg-muted)', padding:16 }}>Aún no hay asistentes.</td></tr>}
+                {asis.asistentes.length === 0 && <tr><td colSpan={6} style={{ color:'var(--fg-muted)', padding:16 }}>Aún no hay asistentes.</td></tr>}
                 {asis.asistentes.map(a => (
-                  <tr key={a.id}><td>{a.nombre}</td><td className="small">{a.email}</td>
-                    <td>{String(a.validacion_1_ok).toUpperCase()==='SI'?'✓':'—'}</td>
-                    <td>{String(a.validacion_2_ok).toUpperCase()==='SI'?'✓':'—'}</td>
+                  <tr key={a.id}><td>{a.nombre}</td><td className="small">{a.email}</td><td className="mono small">{a.dni || '—'}</td>
+                    <td><button className="icon-btn" aria-label="Alternar validación de entrada" title="Alternar entrada" style={{ width:30, height:30, color: String(a.validacion_1_ok).toUpperCase()==='SI' ? '#1F6B3A' : 'var(--fg-muted)' }} onClick={() => toggleVal(a, 1)}>{String(a.validacion_1_ok).toUpperCase()==='SI'?'✓':'—'}</button></td>
+                    <td><button className="icon-btn" aria-label="Alternar validación de salida" title="Alternar salida" style={{ width:30, height:30, color: String(a.validacion_2_ok).toUpperCase()==='SI' ? '#1F6B3A' : 'var(--fg-muted)' }} onClick={() => toggleVal(a, 2)}>{String(a.validacion_2_ok).toUpperCase()==='SI'?'✓':'—'}</button></td>
                     <td>{String(a.certificado_enviado).toUpperCase()==='SI'?'✓':'—'}</td></tr>
                 ))}
               </tbody>
