@@ -427,6 +427,7 @@ const ADMIN_NAV = [
     { id: 'solicitudes', label: 'Solicitudes',  icon: 'inbox' },
     { id: 'eventos',     label: 'Eventos',      icon: 'calendar' },
     { id: 'evaluaciones',label: 'Evaluaciones', icon: 'edit' },
+    { id: 'certificados',label: 'Certificados', icon: 'medal' },
     { id: 'personas',    label: 'Personas',     icon: 'users' },
   ]},
   { section: 'Tienda', items: [
@@ -1663,6 +1664,7 @@ const ADMIN_SECTIONS = {
   solicitudes: { title: 'Solicitudes de acceso',    component: 'AdminSolicitudes' },
   eventos:     { title: 'Eventos',                  component: 'AdminEventos' },
   evaluaciones:{ title: 'Evaluaciones',             component: 'AdminEvaluaciones' },
+  certificados:{ title: 'Certificados',             component: 'AdminCertificados' },
   personas:    { title: 'Personas',                 component: 'AdminPersonas' },
   productos:   { title: 'Tienda · Productos',       component: 'AdminProductos' },
   pedidos:     { title: 'Tienda · Pedidos',         component: 'AdminPedidos' },

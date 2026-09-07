@@ -161,6 +161,7 @@ const NAV_ITEMS = [
   { id: 'eventos', label: 'Eventos' },
   { id: 'noticias', label: 'Noticias' },
   { id: 'tienda', label: 'Tienda' },
+  { id: 'certificados', label: 'Certificados' },
   { id: 'miembros', label: 'Miembros' },
   { id: 'contacto', label: 'Contacto' },
 ];
@@ -248,6 +249,7 @@ const Footer = ({ setPage }) => (
           <h4>Recursos</h4>
           <div className="flex" style={{ flexDirection: 'column', gap: 12 }}>
             <a href="#" onClick={(e) => { e.preventDefault(); setPage('actividades'); }}>Actividades</a>
+            <a href="#" onClick={(e) => { e.preventDefault(); setPage('certificados'); }}>Certificados</a>
             <a href="https://forms.gle/Lk5QrJPaEaQVxLvF8" target="_blank" rel="noopener noreferrer">Inscripción</a>
             <a href="#" onClick={(e) => { e.preventDefault(); setPage('contacto'); }}>Contacto</a>
             <a href="#" onClick={(e) => { e.preventDefault(); setPage('admin'); }}>Acceso interno</a>

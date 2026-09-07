@@ -7,7 +7,7 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "theme": "light"
 }/*EDITMODE-END*/;
 
-const PAGES = ['home', 'nosotros', 'directorio', 'comites', 'miembros', 'eventos', 'noticias', 'tienda', 'registro', 'actividades', 'contacto', 'admin'];
+const PAGES = ['home', 'nosotros', 'directorio', 'comites', 'miembros', 'eventos', 'noticias', 'tienda', 'registro', 'actividades', 'certificados', 'contacto', 'admin'];
 // Parsea el hash en { page, sub }: "#/noticias/mi-slug" → page noticias, sub
 // "mi-slug". Un hash que no corresponde a ninguna página muestra el 404.
 const parseHash = () => {
@@ -70,6 +70,8 @@ const App = () => {
         {page === 'tienda' && <TiendaPage />}
         {page === 'registro' && <RegistroPage />}
         {page === 'actividades' && <ActividadesPage />}
+        {/* sub = código del certificado: es la ruta que abre el QR impreso */}
+        {page === 'certificados' && <CertificadosPage sub={sub} />}
         {page === 'contacto' && <ContactoPage />}
         {page === 'admin' && <AdminPage />}
       </main>
@@ -92,6 +94,7 @@ const App = () => {
               { value: 'tienda', label: 'Tienda' },
               { value: 'registro', label: 'Registro' },
               { value: 'actividades', label: 'Actividades' },
+              { value: 'certificados', label: 'Certificados' },
               { value: 'contacto', label: 'Contacto' },
               { value: 'admin', label: 'Admin (login)' },
             ]}
