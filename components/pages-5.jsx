@@ -62,9 +62,14 @@ const certFechaCorta = (v) => {
 };
 
 const CERT_ROLES = ['PARTICIPANTE', 'PONENTE', 'ORGANIZADOR', 'MODERADOR', 'JURADO', 'ASESOR', 'STAFF'];
+const CERT_TIPOS = ['SOCIEM', 'COLABORATIVA'];
 
 // "en calidad de ponente" / "en calidad de participante"
 const certRolTexto = (rol) => String(rol || 'PARTICIPANTE').toLowerCase();
+
+// La columna se llena a mano ("SOLO SOCIEM", "Colaborativa", "colab. con
+// SOCIMEP"…), así que basta con detectar la raíz "colab".
+const certEsColaborativa = (v) => /COLAB/.test(String(v || '').toUpperCase());
 
 // ───────────────────────── La lámina ─────────────────────────
 
@@ -108,7 +113,11 @@ const CertificadoHoja = ({ cert, cfg }) => {
         <p className="cert-texto">
           Por su participación en calidad de <b>{certRolTexto(c.rol)}</b> en
           {' '}<span className="cert-actividad">«{c.actividad || '—'}»</span>
-          {c.comite ? <>, actividad organizada por el comité <b>{c.comite}</b></> : null}
+          {/* "actividad colaborativa" solo cuando lo es: lo normal es que la
+              organice SOCIEM sola, y decirlo cada vez sería ruido. */}
+          {c.comite
+            ? <>, {certEsColaborativa(c.tipo_actividad) ? 'actividad colaborativa' : 'actividad'} organizada por el comité <b>{c.comite}</b></>
+            : (certEsColaborativa(c.tipo_actividad) ? <>, actividad colaborativa</> : null)}
           {c.fecha ? <>, realizada el <b>{certFecha(c.fecha)}</b></> : null}.
         </p>
 
@@ -362,17 +371,32 @@ const CERT_CABECERAS = {
   NOMBRE: 'nombres', NOMBRES: 'nombres', PARTICIPANTE: 'nombres', APELLIDOSYNOMBRE: 'nombres',
   DNI: 'dni', DOCUMENTO: 'dni', NDOCUMENTO: 'dni',
   ACTIVIDAD: 'actividad', EVENTO: 'actividad', CURSO: 'actividad',
+  SOLOSOCIEMOCOLABORATIVA: 'tipo_actividad', SOLOSOCIEMOCOLABORATIVO: 'tipo_actividad',
+  SOCIEMOCOLABORATIVA: 'tipo_actividad', TIPO: 'tipo_actividad',
+  TIPODEACTIVIDAD: 'tipo_actividad', TIPOACTIVIDAD: 'tipo_actividad',
+  COLABORATIVA: 'tipo_actividad', ORGANIZACION: 'tipo_actividad',
   COMITE: 'comite', COMITEORGANIZADOR: 'comite',
   ROL: 'rol', CONDICION: 'rol', CALIDAD: 'rol', PARTICIPACION: 'rol',
   VALIDOPOR: 'valido_por', VALIDEZ: 'valido_por', HORAS: 'valido_por', HORASACADEMICAS: 'valido_por',
   EMAIL: 'email', CORREO: 'email', CORREOELECTRONICO: 'email',
   OBSERVACION: 'observacion', OBSERVACIONES: 'observacion', NOTA: 'observacion',
 };
-const CERT_ORDEN_DEFECTO = ['fecha', 'nombres', 'dni', 'actividad', 'comite', 'rol', 'valido_por'];
+// Orden del formato acordado con la directiva, para cuando se pega sin títulos.
+const CERT_ORDEN_DEFECTO = ['nombres', 'fecha', 'dni', 'actividad', 'tipo_actividad', 'comite', 'rol', 'valido_por'];
 
-const certNormCab = (s) => String(s || '')
+const certNormTxt = (s) => String(s || '')
   .normalize('NFD').replace(/[̀-ͯ]/g, '')
   .toUpperCase().replace(/[^A-Z]/g, '');
+
+// Los títulos reales del Excel llevan la aclaración dentro del paréntesis
+// —"FECHA (DÍA, MES, AÑO)", "ROL (Ponente, organizador, participante)"— y al
+// normalizarlos enteros no coincidían con nada: la columna se perdía en
+// silencio. Se prueba primero sin el paréntesis y solo después con el título
+// completo, por si alguien tituló la columna con paréntesis a propósito.
+const certCampoDeCabecera = (celda) => {
+  const sinParentesis = String(celda || '').split('(')[0];
+  return CERT_CABECERAS[certNormTxt(sinParentesis)] || CERT_CABECERAS[certNormTxt(celda)] || null;
+};
 
 // ¿La celda es un dato y no un título de columna? Fechas y documentos.
 const certPareceDato = (celda) => {
@@ -393,7 +417,7 @@ const certParsearPegado = (texto) => {
   // Ojo con el falso positivo: una fila de datos con "PARTICIPANTE" y "4 horas"
   // mapea dos columnas y se haría pasar por cabecera, tragándose a esa persona.
   // Una cabecera nunca trae fechas ni documentos, así que eso desempata.
-  const posibles = celdas[0].map(c => CERT_CABECERAS[certNormCab(c)] || null);
+  const posibles = celdas[0].map(certCampoDeCabecera);
   const conCabecera = posibles.filter(Boolean).length >= 2 && !celdas[0].some(certPareceDato);
   const campos = conCabecera ? posibles : CERT_ORDEN_DEFECTO;
   const cuerpo = conCabecera ? celdas.slice(1) : celdas;
@@ -577,6 +601,7 @@ const AdminCertificados = ({ toast }) => {
                 <th>Nombre</th>
                 <th>DNI</th>
                 <th>Actividad</th>
+                <th>Tipo</th>
                 <th>Comité</th>
                 <th>Rol</th>
                 <th>Fecha</th>
@@ -595,6 +620,7 @@ const AdminCertificados = ({ toast }) => {
                   <td style={{ fontWeight: 500 }}>{c.nombres}</td>
                   <td className="mono small">{c.dni}</td>
                   <td style={{ maxWidth: 260 }}>{c.actividad}</td>
+                  <td className="small">{certEsColaborativa(c.tipo_actividad) ? 'Colaborativa' : 'SOCIEM'}</td>
                   <td className="small">{c.comite}</td>
                   <td className="small">{c.rol}</td>
                   <td className="small">{certFechaCorta(c.fecha)}</td>
@@ -646,6 +672,13 @@ const AdminCertificados = ({ toast }) => {
             <AdminField label="Actividad" span>
               <input className="input" value={editando.actividad || ''} onChange={e => setEditando({ ...editando, actividad: e.target.value })} />
             </AdminField>
+            <AdminField label="Solo SOCIEM o colaborativa">
+              <select className="input" value={certEsColaborativa(editando.tipo_actividad) ? 'COLABORATIVA' : 'SOCIEM'}
+                onChange={e => setEditando({ ...editando, tipo_actividad: e.target.value })}>
+                <option value="SOCIEM">Solo SOCIEM</option>
+                <option value="COLABORATIVA">Colaborativa</option>
+              </select>
+            </AdminField>
             <AdminField label="Comité">
               <input className="input" value={editando.comite || ''} onChange={e => setEditando({ ...editando, comite: e.target.value.toUpperCase() })} placeholder="SCOPE-IN, SCORA…" />
             </AdminField>
@@ -654,7 +687,7 @@ const AdminCertificados = ({ toast }) => {
                 {CERT_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
             </AdminField>
-            <AdminField label="Válido por" hint="Ej.: 8 horas académicas · 2 créditos">
+            <AdminField label="Válido por" hint="Ej.: 5 Puntos IFMSA · 8 horas académicas">
               <input className="input" value={editando.valido_por || ''} onChange={e => setEditando({ ...editando, valido_por: e.target.value })} />
             </AdminField>
             <AdminField label="Email" hint="Para el envío del certificado">
@@ -706,7 +739,7 @@ const AdminCertificados = ({ toast }) => {
 // ── Emitir desde un evento (usa las validaciones de asistencia que ya existen)
 const CertEmitirEvento = ({ onClose, onListo, toast }) => {
   const [eventos, setEventos] = React.useState([]);
-  const [form, setForm] = React.useState({ evento_id: '', rol: 'PARTICIPANTE', valido_por: '', incluir_no_validados: 'NO' });
+  const [form, setForm] = React.useState({ evento_id: '', rol: 'PARTICIPANTE', valido_por: '', tipo_actividad: 'SOCIEM', incluir_no_validados: 'NO' });
   const [cargando, setCargando] = React.useState(true);
   const [emitiendo, setEmitiendo] = React.useState(false);
 
@@ -783,8 +816,14 @@ const CertEmitirEvento = ({ onClose, onListo, toast }) => {
             {CERT_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
         </AdminField>
-        <AdminField label="Válido por" hint="Ej.: 8 horas académicas">
+        <AdminField label="Válido por" hint="Ej.: 5 Puntos IFMSA · 8 horas académicas">
           <input className="input" value={form.valido_por} onChange={e => setForm({ ...form, valido_por: e.target.value })} />
+        </AdminField>
+        <AdminField label="Solo SOCIEM o colaborativa" span>
+          <select className="input" value={form.tipo_actividad} onChange={e => setForm({ ...form, tipo_actividad: e.target.value })}>
+            <option value="SOCIEM">Solo SOCIEM</option>
+            <option value="COLABORATIVA">Colaborativa</option>
+          </select>
         </AdminField>
       </div>
 
@@ -809,7 +848,7 @@ const CertEmitirEvento = ({ onClose, onListo, toast }) => {
 // ── Importar una lista pegada desde Excel
 const CertImportar = ({ onClose, onListo, toast }) => {
   const [texto, setTexto] = React.useState('');
-  const [comunes, setComunes] = React.useState({ actividad: '', comite: '', fecha: '', valido_por: '', rol: '' });
+  const [comunes, setComunes] = React.useState({ actividad: '', comite: '', fecha: '', valido_por: '', rol: '', tipo_actividad: '' });
   const [subiendo, setSubiendo] = React.useState(false);
 
   const parsed = React.useMemo(() => certParsearPegado(texto), [texto]);
@@ -853,8 +892,9 @@ const CertImportar = ({ onClose, onListo, toast }) => {
     >
       <p className="small" style={{ color: 'var(--fg-muted)', marginTop: 0, lineHeight: 1.55 }}>
         Copia las filas desde Excel y pégalas aquí. Se reconocen las columnas
-        <b> FECHA · NOMBRE Y APELLIDOS · DNI · ACTIVIDAD · COMITE · ROL · VALIDO POR</b> (más
-        EMAIL y OBSERVACION). Si pegas sin fila de títulos, se asume ese mismo orden.
+        <b> NOMBRES Y APELLIDOS · FECHA · DNI · ACTIVIDAD · SOLO SOCIEM O COLABORATIVA ·
+        COMITÉ · ROL · VÁLIDO POR</b> (más EMAIL y OBSERVACIÓN). Si pegas sin fila
+        de títulos, se asume ese mismo orden.
       </p>
 
       <AdminField label="Pega aquí la lista">
@@ -863,7 +903,7 @@ const CertImportar = ({ onClose, onListo, toast }) => {
           rows={8}
           value={texto}
           onChange={e => setTexto(e.target.value)}
-          placeholder={'FECHA\tNOMBRE Y APELLIDOS\tDNI\tACTIVIDAD\tCOMITE\tROL\tVALIDO POR\n12/09/2026\tMaría Quispe Mamani\t72345678\tTaller de sutura\tSCOME\tPARTICIPANTE\t8 horas académicas'}
+          placeholder={'NOMBRES Y APELLIDOS\tFECHA\tDNI\tACTIVIDAD\tSOLO SOCIEM O COLABORATIVA\tCOMITÉ\tROL\tVÁLIDO POR\nMaría Quispe Mamani\t12/09/2026\t72345678\tTaller de sutura\tSOLO SOCIEM\tSCOME\tPARTICIPANTE\t5 Puntos IFMSA'}
           style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre', overflowX: 'auto' }}
         />
       </AdminField>
@@ -882,6 +922,13 @@ const CertImportar = ({ onClose, onListo, toast }) => {
           </AdminField>
           <AdminField label="Comité">
             <input className="input" value={comunes.comite} onChange={e => setComunes({ ...comunes, comite: e.target.value.toUpperCase() })} />
+          </AdminField>
+          <AdminField label="Solo SOCIEM o colaborativa">
+            <select className="input" value={comunes.tipo_actividad} onChange={e => setComunes({ ...comunes, tipo_actividad: e.target.value })}>
+              <option value="">— de la lista —</option>
+              <option value="SOCIEM">Solo SOCIEM</option>
+              <option value="COLABORATIVA">Colaborativa</option>
+            </select>
           </AdminField>
           <AdminField label="Rol">
             <select className="input" value={comunes.rol} onChange={e => setComunes({ ...comunes, rol: e.target.value })}>
@@ -909,15 +956,16 @@ const CertImportar = ({ onClose, onListo, toast }) => {
           <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
             <table className="admin-table" style={{ width: '100%', fontSize: 12.5 }}>
               <thead>
-                <tr><th>Fecha</th><th>Nombre</th><th>DNI</th><th>Actividad</th><th>Comité</th><th>Rol</th><th>Válido por</th></tr>
+                <tr><th>Nombre</th><th>Fecha</th><th>DNI</th><th>Actividad</th><th>Tipo</th><th>Comité</th><th>Rol</th><th>Válido por</th></tr>
               </thead>
               <tbody>
                 {filasFinales.slice(0, 40).map((f, i) => (
                   <tr key={i}>
-                    <td className="small">{f.fecha}</td>
                     <td>{f.nombres}</td>
+                    <td className="small">{f.fecha}</td>
                     <td className="mono small">{f.dni}</td>
                     <td className="small">{f.actividad}</td>
+                    <td className="small">{certEsColaborativa(f.tipo_actividad) ? 'Colaborativa' : 'SOCIEM'}</td>
                     <td className="small">{f.comite}</td>
                     <td className="small">{f.rol || 'PARTICIPANTE'}</td>
                     <td className="small">{f.valido_por}</td>
@@ -940,4 +988,5 @@ const CertImportar = ({ onClose, onListo, toast }) => {
 Object.assign(window, {
   CertificadosPage, AdminCertificados, CertificadoHoja, CertEscala,
   CertPrintPortal, certParsearPegado, certFecha, certFechaCorta,
+  certEsColaborativa,
 });
