@@ -53,23 +53,36 @@ const certAnio = (a) => (String(a).length <= 2 ? 2000 + Number(a) : Number(a));
 // hojas de los comités.
 const CERT_DMY = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/;
 
-const certFecha = (v) => {
+// Última defensa: una celda con formato de fecha llega desde Apps Script como
+// "Fri May 01 2026 00:00:00 GMT-0500 (hora estándar de Perú)". Los componentes
+// se leen del propio texto en vez de construir un Date, porque parsearlo
+// cambiaría el día en un navegador con otro huso.
+const CERT_MESES_EN = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+const CERT_JSDATE = /^[A-Za-z]{3}\s+([A-Za-z]{3})\s+(\d{1,2})\s+(\d{4})/;
+
+// Devuelve {d, m, a} desde cualquiera de los formatos conocidos, o null.
+const certPartesFecha = (v) => {
   const s = String(v || '').trim();
-  if (!s) return '';
+  if (!s) return null;
   const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${Number(iso[3])} de ${CERT_MESES[Number(iso[2]) - 1] || ''} de ${iso[1]}`;
+  if (iso) return { d: Number(iso[3]), m: Number(iso[2]), a: Number(iso[1]) };
   const dmy = s.match(CERT_DMY);
-  if (dmy) return `${Number(dmy[1])} de ${CERT_MESES[Number(dmy[2]) - 1] || ''} de ${certAnio(dmy[3])}`;
-  return s;
+  if (dmy) return { d: Number(dmy[1]), m: Number(dmy[2]), a: certAnio(dmy[3]) };
+  const js = s.match(CERT_JSDATE);
+  if (js && CERT_MESES_EN[js[1]] !== undefined) return { d: Number(js[2]), m: CERT_MESES_EN[js[1]] + 1, a: Number(js[3]) };
+  return null;
+};
+
+const certFecha = (v) => {
+  const p = certPartesFecha(v);
+  if (!p) return String(v || '').trim();
+  return `${p.d} de ${CERT_MESES[p.m - 1] || ''} de ${p.a}`;
 };
 
 const certFechaCorta = (v) => {
-  const s = String(v || '').trim();
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
-  const dmy = s.match(CERT_DMY);
-  if (dmy) return `${dmy[1].padStart(2, '0')}/${dmy[2].padStart(2, '0')}/${certAnio(dmy[3])}`;
-  return s;
+  const p = certPartesFecha(v);
+  if (!p) return String(v || '').trim();
+  return `${String(p.d).padStart(2, '0')}/${String(p.m).padStart(2, '0')}/${p.a}`;
 };
 
 const CERT_ROLES = ['PARTICIPANTE', 'PONENTE', 'ORGANIZADOR', 'MODERADOR', 'JURADO', 'ASESOR', 'STAFF'];
@@ -122,8 +135,10 @@ const CertificadoHoja = ({ cert, cfg }) => {
   const conf = cfg || {};
   const base = (conf.SITIO_URL || 'https://sociemunapuno.com').replace(/\/+$/, '');
   const link = `${base}/#/certificados/${encodeURIComponent(c.codigo || '')}`;
-  const logoComite = certComiteLogo(c.comite);
   const comites = certComites(c.comite);
+  const logosComites = comites
+    .map(cod => ({ cod, url: typeof comiteLogoUrl === 'function' ? comiteLogoUrl(cod) : null }))
+    .filter(l => l.url);
   const anulado = String(c.estado || '').toUpperCase() === 'ANULADO';
 
   return (
@@ -142,13 +157,25 @@ const CertificadoHoja = ({ cert, cfg }) => {
             <div className="cert-uni">Universidad Nacional del Altiplano · Puno</div>
             <div className="cert-filial">Filial oficial IFMSA-Perú · SOCIMEP</div>
           </div>
-          {logoComite
-            ? <img src={logoComite} alt="" className="cert-logo" />
-            : <div className="cert-logo" />}
+          {/* Escudos institucionales: se configuran en la hoja `config` para
+              poder cambiarlos sin tocar el código. */}
+          <div className="cert-head-inst">
+            {[conf.CERT_LOGO_UNIVERSIDAD, conf.CERT_LOGO_FACULTAD].filter(Boolean).map((u, i) => (
+              <img key={i} src={typeof IMG === 'function' ? IMG(u) : u} alt="" className="cert-logo-inst" />
+            ))}
+            {!conf.CERT_LOGO_UNIVERSIDAD && !conf.CERT_LOGO_FACULTAD && <div className="cert-logo" />}
+          </div>
         </header>
 
+        {/* Todos los comités que organizaron, no solo el primero. */}
+        {logosComites.length > 0 && (
+          <div className={'cert-comites' + (logosComites.length > 5 ? ' cert-comites-muchos' : '')}>
+            {logosComites.map(l => <img key={l.cod} src={l.url} alt={l.cod} title={l.cod} />)}
+          </div>
+        )}
+
         <div className="cert-titulo">Certificado</div>
-        <div className="cert-otorga">otorgado a</div>
+        <div className="cert-otorga">otorgan el presente a:</div>
 
         <div className="cert-nombre">{c.nombres || '—'}</div>
         {(c.dni || c.dni_masked) && (
@@ -163,12 +190,9 @@ const CertificadoHoja = ({ cert, cfg }) => {
           {comites.length
             ? <>, {certEsColaborativa(c.tipo_actividad) ? 'actividad colaborativa' : 'actividad'} organizada por {comites.length > 1 ? 'los comités' : 'el comité'} <b>{certComitesTexto(c.comite)}</b></>
             : (certEsColaborativa(c.tipo_actividad) ? <>, actividad colaborativa</> : null)}
-          {c.fecha ? <>, realizada el <b>{certFecha(c.fecha)}</b></> : null}.
+          {c.fecha ? <>, realizada el <b>{certFecha(c.fecha)}</b></> : null}
+          {c.valido_por ? <>; válido por <b>{c.valido_por}</b></> : null}.
         </p>
-
-        {c.valido_por && (
-          <div className="cert-valido">Válido por {c.valido_por}</div>
-        )}
 
         <footer className="cert-pie">
           <div className="cert-pie-qr">

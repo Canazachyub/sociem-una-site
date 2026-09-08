@@ -855,6 +855,21 @@ img[src*="mascota-"] { animation: mascotaFloat 4.5s ease-in-out infinite; will-c
   gap: 8mm;
 }
 .cert-logo { width: 20mm; height: 20mm; object-fit: contain; flex: none; }
+.cert-head-inst { display: flex; align-items: center; gap: 3mm; flex: none; }
+.cert-logo-inst { height: 18mm; width: auto; max-width: 20mm; object-fit: contain; display: block; }
+
+/* Fila con TODOS los comités que organizaron. Con muchos, encogen en vez de
+   desbordar: en la base real hay actividades con siete comités. */
+.cert-comites {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3mm;
+  margin-top: 4mm;
+  flex-wrap: wrap;
+}
+.cert-comites img { height: 14mm; width: auto; object-fit: contain; display: block; }
+.cert-comites-muchos img { height: 11mm; }
 .cert-head-txt { flex: 1; }
 .cert-inst {
   font-family: var(--font-serif);
@@ -875,20 +890,20 @@ img[src*="mascota-"] { animation: mascotaFloat 4.5s ease-in-out infinite; will-c
 
 .cert-titulo {
   font-family: var(--font-serif);
-  font-size: 15mm;
+  font-size: 14mm;
   font-weight: 600;
   letter-spacing: .06em;
   color: #6B2D9E;
-  margin-top: 6mm;
+  margin-top: 4mm;
   line-height: 1;
   text-transform: uppercase;
 }
 .cert-otorga {
   font-family: var(--font-mono);
-  font-size: 3mm;
-  letter-spacing: .3em;
+  font-size: 3.2mm;
+  letter-spacing: .26em;
   text-transform: uppercase;
-  color: #8A7FA0;
+  color: #7A5A12;
   margin-top: 2.5mm;
 }
 
@@ -911,13 +926,20 @@ img[src*="mascota-"] { animation: mascotaFloat 4.5s ease-in-out infinite; will-c
 }
 
 .cert-texto {
-  font-size: 4.4mm;
-  line-height: 1.65;
-  max-width: 200mm;
+  font-size: 4.2mm;
+  line-height: 1.7;
+  max-width: 205mm;
   margin: 6mm 0 0;
   color: #3A2352;
+  /* El certificado oficial de la sociedad va en versales y justificado.
+     text-transform respeta las tildes ("CÓMO"), a diferencia de escribirlo
+     ya en mayúsculas en los datos, que rompería la búsqueda por nombre. */
+  text-transform: uppercase;
+  text-align: justify;
+  text-align-last: center;
+  letter-spacing: .01em;
 }
-.cert-actividad { font-family: var(--font-serif); font-size: 5mm; font-weight: 600; }
+.cert-actividad { font-family: var(--font-serif); font-size: 4.8mm; font-weight: 600; }
 
 .cert-valido {
   margin-top: 4mm;
