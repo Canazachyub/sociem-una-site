@@ -117,15 +117,12 @@ const certComitesTexto = (v) => {
   return l.slice(0, -1).join(', ') + ' y ' + l[l.length - 1];
 };
 
-// Para el logo de la cabecera: el primero de la lista que tenga uno.
-const certComiteLogo = (v) => {
+// Versión reducida del logo (400 px). Los originales son de 3375 px y ~1 MB:
+// un certificado con siete comités cargaba 7 MB para imprimirlos a 14 mm.
+const certLogoComite = (cod) => {
   if (typeof comiteLogoUrl !== 'function') return null;
-  const l = certComites(v);
-  for (let i = 0; i < l.length; i++) {
-    const u = comiteLogoUrl(l[i]);
-    if (u) return u;
-  }
-  return null;
+  const u = comiteLogoUrl(cod);
+  return u ? u.replace('assets/logos/', 'assets/logos/sm/') : null;
 };
 
 // ───────────────────────── La lámina ─────────────────────────
@@ -137,8 +134,12 @@ const CertificadoHoja = ({ cert, cfg }) => {
   const link = `${base}/#/certificados/${encodeURIComponent(c.codigo || '')}`;
   const comites = certComites(c.comite);
   const logosComites = comites
-    .map(cod => ({ cod, url: typeof comiteLogoUrl === 'function' ? comiteLogoUrl(cod) : null }))
+    .map(cod => ({ cod, url: certLogoComite(cod) }))
     .filter(l => l.url);
+  // Los tamaños de la lámina van también en el elemento, no solo en la hoja de
+  // estilos: si el navegador sirve un CSS cacheado sin estas reglas, un logo
+  // de 3375 px se pinta a tamaño real y destroza el certificado.
+  const mmLogo = logosComites.length > 5 ? '11mm' : '14mm';
   const anulado = String(c.estado || '').toUpperCase() === 'ANULADO';
 
   return (
@@ -151,7 +152,8 @@ const CertificadoHoja = ({ cert, cfg }) => {
 
       <div className="cert-cuerpo">
         <header className="cert-head">
-          <img src="assets/logos/logo_SOCIEM-UNA.png" alt="" className="cert-logo" />
+          <img src="assets/logos/sm/logo_SOCIEM-UNA.png" alt="" className="cert-logo"
+            style={{ width: '20mm', height: '20mm', objectFit: 'contain', flex: 'none' }} />
           <div className="cert-head-txt">
             <div className="cert-inst">Sociedad Científica de Estudiantes de Medicina</div>
             <div className="cert-uni">Universidad Nacional del Altiplano · Puno</div>
@@ -161,16 +163,20 @@ const CertificadoHoja = ({ cert, cfg }) => {
               poder cambiarlos sin tocar el código. */}
           <div className="cert-head-inst">
             {[conf.CERT_LOGO_UNIVERSIDAD, conf.CERT_LOGO_FACULTAD].filter(Boolean).map((u, i) => (
-              <img key={i} src={typeof IMG === 'function' ? IMG(u) : u} alt="" className="cert-logo-inst" />
+              <img key={i} src={typeof IMG === 'function' ? IMG(u) : u} alt="" className="cert-logo-inst"
+                style={{ height: '18mm', width: 'auto', maxWidth: '20mm', objectFit: 'contain', display: 'block' }} />
             ))}
-            {!conf.CERT_LOGO_UNIVERSIDAD && !conf.CERT_LOGO_FACULTAD && <div className="cert-logo" />}
+            {!conf.CERT_LOGO_UNIVERSIDAD && !conf.CERT_LOGO_FACULTAD && <div className="cert-logo" style={{ width: '20mm', height: '20mm' }} />}
           </div>
         </header>
 
         {/* Todos los comités que organizaron, no solo el primero. */}
         {logosComites.length > 0 && (
           <div className={'cert-comites' + (logosComites.length > 5 ? ' cert-comites-muchos' : '')}>
-            {logosComites.map(l => <img key={l.cod} src={l.url} alt={l.cod} title={l.cod} />)}
+            {logosComites.map(l => (
+              <img key={l.cod} src={l.url} alt={l.cod} title={l.cod}
+                style={{ height: mmLogo, width: 'auto', objectFit: 'contain', display: 'block' }} />
+            ))}
           </div>
         )}
 
@@ -205,8 +211,9 @@ const CertificadoHoja = ({ cert, cfg }) => {
 
           <div className="cert-firma">
             {conf.CERT_FIRMA_IMG
-              ? <img src={typeof IMG === 'function' ? IMG(conf.CERT_FIRMA_IMG) : conf.CERT_FIRMA_IMG} alt="" className="cert-firma-img" />
-              : <div className="cert-firma-hueco" />}
+              ? <img src={typeof IMG === 'function' ? IMG(conf.CERT_FIRMA_IMG) : conf.CERT_FIRMA_IMG} alt="" className="cert-firma-img"
+                  style={{ height: '16mm', width: 'auto', maxWidth: '60mm', objectFit: 'contain', display: 'block', margin: '0 auto 1mm' }} />
+              : <div className="cert-firma-hueco" style={{ height: '16mm' }} />}
             <div className="cert-firma-linea" />
             <div className="cert-firma-nombre">{conf.CERT_FIRMA_NOMBRE || 'Presidencia SOCIEM-UNA'}</div>
             <div className="cert-firma-cargo">{conf.CERT_FIRMA_CARGO || 'Sociedad Científica de Estudiantes de Medicina'}</div>

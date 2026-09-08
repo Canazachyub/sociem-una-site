@@ -825,6 +825,12 @@ img[src*="mascota-"] { animation: mascotaFloat 4.5s ease-in-out infinite; will-c
     radial-gradient(circle at 96% 94%, rgba(201,162,74,.10), transparent 34%);
 }
 
+/* Red de seguridad: ninguna imagen de la lámina puede desbordarla, pase lo
+   que pase con las reglas de abajo o con un CSS cacheado a medias. Los logos
+   de comité son PNG de 3375 px y sin tope destrozan la hoja. */
+.cert-hoja img { max-width: 100%; max-height: 24mm; object-fit: contain; }
+.cert-hoja .cert-firma-img { max-height: 16mm; }
+
 .cert-marco {
   position: absolute; inset: 6mm;
   border: 1.1mm solid #6B2D9E;
