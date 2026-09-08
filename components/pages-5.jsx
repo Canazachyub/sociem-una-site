@@ -45,20 +45,31 @@ const CERT_MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'juli
 // Acepta lo que venga de Sheets: ISO, dd/mm/aaaa, un rango escrito a mano
 // ("12 y 13 de setiembre") o texto libre. Lo que no reconoce, lo devuelve tal
 // cual — el certificado nunca debe quedar con una fecha inventada.
+// Año de dos dígitos → siglo actual. En la base real las fechas vienen como
+// "25.04.26", así que sin esto el certificado imprimiría el año 26.
+const certAnio = (a) => (String(a).length <= 2 ? 2000 + Number(a) : Number(a));
+
+// dd/mm/aaaa, dd-mm-aa y dd.mm.aa — los tres separadores que aparecen en las
+// hojas de los comités.
+const CERT_DMY = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/;
+
 const certFecha = (v) => {
   const s = String(v || '').trim();
   if (!s) return '';
   const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${Number(iso[3])} de ${CERT_MESES[Number(iso[2]) - 1] || ''} de ${iso[1]}`;
-  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (dmy) return `${Number(dmy[1])} de ${CERT_MESES[Number(dmy[2]) - 1] || ''} de ${dmy[3]}`;
+  const dmy = s.match(CERT_DMY);
+  if (dmy) return `${Number(dmy[1])} de ${CERT_MESES[Number(dmy[2]) - 1] || ''} de ${certAnio(dmy[3])}`;
   return s;
 };
 
 const certFechaCorta = (v) => {
   const s = String(v || '').trim();
   const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return iso ? `${iso[3]}/${iso[2]}/${iso[1]}` : s;
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  const dmy = s.match(CERT_DMY);
+  if (dmy) return `${dmy[1].padStart(2, '0')}/${dmy[2].padStart(2, '0')}/${certAnio(dmy[3])}`;
+  return s;
 };
 
 const CERT_ROLES = ['PARTICIPANTE', 'PONENTE', 'ORGANIZADOR', 'MODERADOR', 'JURADO', 'ASESOR', 'STAFF'];
@@ -71,6 +82,39 @@ const certRolTexto = (rol) => String(rol || 'PARTICIPANTE').toLowerCase();
 // SOCIMEP"…), así que basta con detectar la raíz "colab".
 const certEsColaborativa = (v) => /COLAB/.test(String(v || '').toUpperCase());
 
+// En las hojas de los comités la celda COMITÉ suele traer varios códigos
+// pegados con guiones: "SCOPE-CPRII", "SCOPH-SCORE-SCOME-CPC-SCOPE-CPRII-CPPC".
+// Se parten por cualquier separador, reensamblando SCOPE-IN / SCOPE-OUT, que
+// son códigos con guion propio.
+const certComites = (v) => {
+  const partes = String(v || '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+  const out = [];
+  for (let i = 0; i < partes.length; i++) {
+    const par = partes[i] + '-' + (partes[i + 1] || '');
+    if (par === 'SCOPE-IN' || par === 'SCOPE-OUT') { out.push(par); i++; }
+    else out.push(partes[i]);
+  }
+  return out.filter((c, i) => out.indexOf(c) === i);
+};
+
+// "SCOME", "SCOME y CPRII", "SCOPH, SCORE y SCOME"
+const certComitesTexto = (v) => {
+  const l = certComites(v);
+  if (l.length <= 1) return l[0] || '';
+  return l.slice(0, -1).join(', ') + ' y ' + l[l.length - 1];
+};
+
+// Para el logo de la cabecera: el primero de la lista que tenga uno.
+const certComiteLogo = (v) => {
+  if (typeof comiteLogoUrl !== 'function') return null;
+  const l = certComites(v);
+  for (let i = 0; i < l.length; i++) {
+    const u = comiteLogoUrl(l[i]);
+    if (u) return u;
+  }
+  return null;
+};
+
 // ───────────────────────── La lámina ─────────────────────────
 
 const CertificadoHoja = ({ cert, cfg }) => {
@@ -78,7 +122,8 @@ const CertificadoHoja = ({ cert, cfg }) => {
   const conf = cfg || {};
   const base = (conf.SITIO_URL || 'https://sociemunapuno.com').replace(/\/+$/, '');
   const link = `${base}/#/certificados/${encodeURIComponent(c.codigo || '')}`;
-  const logoComite = typeof comiteLogoUrl === 'function' ? comiteLogoUrl(c.comite) : null;
+  const logoComite = certComiteLogo(c.comite);
+  const comites = certComites(c.comite);
   const anulado = String(c.estado || '').toUpperCase() === 'ANULADO';
 
   return (
@@ -115,8 +160,8 @@ const CertificadoHoja = ({ cert, cfg }) => {
           {' '}<span className="cert-actividad">«{c.actividad || '—'}»</span>
           {/* "actividad colaborativa" solo cuando lo es: lo normal es que la
               organice SOCIEM sola, y decirlo cada vez sería ruido. */}
-          {c.comite
-            ? <>, {certEsColaborativa(c.tipo_actividad) ? 'actividad colaborativa' : 'actividad'} organizada por el comité <b>{c.comite}</b></>
+          {comites.length
+            ? <>, {certEsColaborativa(c.tipo_actividad) ? 'actividad colaborativa' : 'actividad'} organizada por {comites.length > 1 ? 'los comités' : 'el comité'} <b>{certComitesTexto(c.comite)}</b></>
             : (certEsColaborativa(c.tipo_actividad) ? <>, actividad colaborativa</> : null)}
           {c.fecha ? <>, realizada el <b>{certFecha(c.fecha)}</b></> : null}.
         </p>
@@ -420,7 +465,15 @@ const certParsearPegado = (texto) => {
   const posibles = celdas[0].map(certCampoDeCabecera);
   const conCabecera = posibles.filter(Boolean).length >= 2 && !celdas[0].some(certPareceDato);
   const campos = conCabecera ? posibles : CERT_ORDEN_DEFECTO;
-  const cuerpo = conCabecera ? celdas.slice(1) : celdas;
+  let cuerpo = conCabecera ? celdas.slice(1) : celdas;
+
+  // Las hojas de los comités llevan a la izquierda el número de fila (1, 2,
+  // 3…). Con cabecera esa columna simplemente no mapea y se ignora sola, pero
+  // sin cabecera correría todo el orden un puesto y los nombres caerían en la
+  // fecha. Un correlativo nunca pasa de 4 dígitos, así que no choca con el DNI.
+  if (!conCabecera && cuerpo.length && cuerpo.every(f => /^\d{1,4}$/.test(String(f[0] || '').trim()))) {
+    cuerpo = cuerpo.map(f => f.slice(1));
+  }
 
   const filas = cuerpo.map(fila => {
     const o = {};
@@ -988,5 +1041,5 @@ const CertImportar = ({ onClose, onListo, toast }) => {
 Object.assign(window, {
   CertificadosPage, AdminCertificados, CertificadoHoja, CertEscala,
   CertPrintPortal, certParsearPegado, certFecha, certFechaCorta,
-  certEsColaborativa,
+  certEsColaborativa, certComites, certComitesTexto,
 });
