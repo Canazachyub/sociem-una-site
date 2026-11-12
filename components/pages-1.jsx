@@ -301,13 +301,22 @@ const NosotrosPage = () => {
 // Tarjeta de persona estilo Green Deck: foto cuadrada, nombre en blanco,
 // cargo en muted, insignia del comité y redes al hover. Props estables (se
 // usa también desde otras páginas).
-const MemberCard = ({ code, cargo, nombre, desc, accent, foto, instagram, linkedin, email }) => {
+// Si la foto no carga (archivo de Drive privado o borrado) se cae a las
+// iniciales en vez de mostrar el ícono de imagen rota.
+const usePubFoto = (foto) => {
+  const [rota, setRota] = React.useState(false);
+  React.useEffect(() => setRota(false), [foto]);
+  return [foto && !rota ? foto : '', () => setRota(true)];
+};
+
+const MemberCard = ({ code, cargo, nombre, desc, accent, foto: fotoOrig, instagram, linkedin, email }) => {
   const logo = pubLogoSm(code);
+  const [foto, fotoFalla] = usePubFoto(fotoOrig);
   return (
     <article className="card card-hover member-card pub-member" style={{ '--accent': accent || 'var(--primary)' }}>
       <div className={`avatar${foto ? '' : ' pub-avatar-vacio'}`}>
         {foto
-          ? <img src={foto} alt={nombre || cargo} loading="lazy" />
+          ? <img src={foto} alt={nombre || cargo} loading="lazy" onError={fotoFalla} />
           : <span className="pub-avatar-ini" aria-hidden="true">{pubIniciales(nombre || code)}</span>}
         {logo && (
           <span className="avatar-badge" title={code}>
@@ -417,11 +426,13 @@ const adaptDivision = (r) => ({
 const pubTienePersona = (n) => !!(n && String(n).trim() && !/por designar/i.test(n) && n !== '—');
 
 // Tarjeta grande de la presidencia: encabeza el directorio.
-const PubLeadCard = ({ m }) => (
+const PubLeadCard = ({ m }) => {
+  const [foto, fotoFalla] = usePubFoto(m.foto);
+  return (
   <article className="card pub-lead">
     <span className="halo halo-violet pub-lead-halo" aria-hidden="true" />
-    <div className={`pub-lead-foto${m.foto ? '' : ' pub-avatar-vacio'}`}>
-      {m.foto ? <img src={m.foto} alt={m.nombre || m.cargo} /> : <span className="pub-avatar-ini" aria-hidden="true">{pubIniciales(m.nombre || m.code)}</span>}
+    <div className={`pub-lead-foto${foto ? '' : ' pub-avatar-vacio'}`}>
+      {foto ? <img src={foto} alt={m.nombre || m.cargo} onError={fotoFalla} /> : <span className="pub-avatar-ini" aria-hidden="true">{pubIniciales(m.nombre || m.code)}</span>}
     </div>
     <div className="pub-lead-txt">
       <span className="badge badge-gold"><Icon name="star" size={12} /> {m.cargo || 'Presidencia'}</span>
@@ -431,7 +442,8 @@ const PubLeadCard = ({ m }) => (
       <PubRedes quien={m.nombre || m.cargo} instagram={m.instagram} linkedin={m.linkedin} email={m.email} className="pub-lead-redes" />
     </div>
   </article>
-);
+  );
+};
 
 const DirectorioPage = () => {
   const [filtro, setFiltro] = React.useState('todos');
