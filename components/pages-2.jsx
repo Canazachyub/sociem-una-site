@@ -29,9 +29,42 @@ const REAL_MEMBERS = [
   { nombre: 'Yasmine Marilyn Cruz Pari',          cargo: 'Miembro Activa',             comite: 'CPDII',    comiteColor: 'var(--c-cpdii)',   year: '3°', semester: 'I-2026', foto: 'assets/miembros/yasmine-marilyn-cruz-pari.jpg' },
 ];
 
+// Iniciales para avatares sin foto ("Ana Patricia" → "AP").
+const p2Iniciales = (txt) => String(txt || '').split(/\s+/).filter(Boolean).map(s => s[0]).slice(0, 2).join('').toUpperCase() || '?';
+// "PENDIENTE" → "Pendiente" (solo presentación; el valor real no cambia).
+const p2Titulo = (txt) => { const s = String(txt || '').replace(/_/g, ' ').toLowerCase(); return s.charAt(0).toUpperCase() + s.slice(1); };
+
+// Tarjeta de miembro estilo Green Deck: foto cuadrada que escala al hover,
+// logo del comité en la esquina y, si la foto no carga, las iniciales.
+const MiembroCard = ({ m }) => {
+  const [rota, setRota] = React.useState(false);
+  const logo = comiteLogoUrl(m.comite);
+  return (
+    <article className="card pm-card">
+      <div className="avatar">
+        {m.foto && !rota
+          ? <img src={m.foto} alt={m.nombre} loading="lazy" onError={() => setRota(true)} />
+          : <div className="pm-initials" aria-hidden="true">{p2Iniciales(m.nombre)}</div>}
+        {logo && (
+          <span className="avatar-badge" title={m.comite}>
+            <img src={logo} alt={m.comite} />
+          </span>
+        )}
+      </div>
+      <div className="pm-name">{m.nombre}</div>
+      <div className="pm-role">{m.cargo}</div>
+      <div className="pm-foot">
+        <span className="pm-comite"><span className="adm-dot" style={{ background: m.comiteColor }} />{m.comite}</span>
+        <span className="mono">{m.year} · {m.semester}</span>
+      </div>
+    </article>
+  );
+};
+
 const MiembrosPage = () => {
   const [filterYear, setFilterYear] = React.useState('todos');
   const [filterComite, setFilterComite] = React.useState('todos');
+  const [q, setQ] = React.useState('');
   const [live, setLive] = React.useState(null);
 
   React.useEffect(() => {
@@ -55,66 +88,49 @@ const MiembrosPage = () => {
 
   const source = live && live.length > 0 ? live : REAL_MEMBERS;
   const comitesUnicos = Array.from(new Set(source.map(m => m.comite))).sort();
+  const colorDe = (c) => { const m = source.find(x => x.comite === c); return m ? m.comiteColor : 'var(--primary)'; };
+  const texto = q.trim().toLowerCase();
   const filtered = source.filter(m =>
     (filterYear === 'todos' || m.year === filterYear) &&
-    (filterComite === 'todos' || m.comite === filterComite)
+    (filterComite === 'todos' || m.comite === filterComite) &&
+    (!texto || (m.nombre + ' ' + m.cargo + ' ' + m.comite).toLowerCase().includes(texto))
   );
   return (
     <div className="page-fade">
-      <section style={{ paddingTop: 64, paddingBottom: 32 }}>
-        <div className="container">
-          <div className="eyebrow">Miembros · Periodo 2026</div>
-          <h1 className="h-display mt-6" style={{ fontSize: 'clamp(44px, 5.5vw, 72px)' }}>
-            {source.length} miembros,<br/>una sola sociedad.
-          </h1>
-          <p className="lede mt-6">Galería pública del equipo de SOCIEM-UNA, gestión 2026: la directiva, los comités y las divisiones que hacen posible la sociedad.</p>
-        </div>
-      </section>
+      <PageHero
+        img="assets/banners/directorio-banner.jpg"
+        eyebrow="Miembros · Periodo 2026"
+        title={<>{source.length} miembros, <em>una sola sociedad.</em></>}
+        lede="Galería pública del equipo de SOCIEM-UNA, gestión 2026: la directiva, los comités y las divisiones que hacen posible la sociedad."
+      />
 
-      <section style={{ paddingTop: 32 }}>
+      <section className="p2-section">
         <div className="container">
-          <div className="card" style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-            <Icon name="filter" size={16} style={{ color: 'var(--fg-muted)' }} />
-            <div className="mono small">FILTROS</div>
-            <select className="select" style={{ padding: '8px 14px' }} value={filterYear} onChange={e => setFilterYear(e.target.value)}>
-              <option value="todos">Año académico</option>
-              {['1°','2°','3°','4°','5°','6°'].map(y => <option key={y}>{y}</option>)}
+          <div className="pm-toolbar">
+            <AdmSearch value={q} onChange={setQ} placeholder="Buscar por nombre o cargo" />
+            <select className="select adm-select" aria-label="Año académico" value={filterYear} onChange={e => setFilterYear(e.target.value)}>
+              <option value="todos">Todos los años</option>
+              {['1°','2°','3°','4°','5°','6°'].map(y => <option key={y} value={y}>{y} año</option>)}
             </select>
-            <select className="select" style={{ padding: '8px 14px' }} value={filterComite} onChange={e => setFilterComite(e.target.value)}>
-              <option value="todos">Comité</option>
-              {comitesUnicos.map(c => <option key={c}>{c}</option>)}
-            </select>
-            <span className="small" style={{ marginLeft: 'auto', color: 'var(--fg-muted)' }}>{filtered.length} miembros</span>
+            <span className="adm-toolbar-spacer" />
+            <span className="adm-count">{filtered.length} de {source.length}</span>
           </div>
+          <AdmChips
+            value={filterComite}
+            onChange={setFilterComite}
+            options={[{ value: 'todos', label: 'Todos los comités' }].concat(comitesUnicos.map(c => ({ value: c, label: c, dot: colorDe(c) })))}
+          />
 
-          <div className="grid col-4 gap-6 mt-8" style={{ marginTop: 32 }}>
-            {filtered.map((m, i) => (
-              <div key={i} className="card card-hover" style={{ padding: '20px 18px', textAlign: 'center' }}>
-                <div className="avatar" style={{ background: m.foto ? 'var(--bg-soft)' : `linear-gradient(135deg, ${m.comiteColor} 0%, var(--violet-300) 100%)` }}>
-                  {m.foto ? (
-                    <img src={m.foto} alt={m.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                  ) : (
-                    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-serif)', fontSize: 32, color: '#fff', fontWeight: 600 }}>
-                      {m.nombre.split(' ').map(s => s[0]).slice(0, 2).join('')}
-                    </div>
-                  )}
-                  {comiteLogoUrl(m.comite) && (
-                    <span className="avatar-badge" title={m.comite}>
-                      <img src={comiteLogoUrl(m.comite)} alt={m.comite} />
-                    </span>
-                  )}
-                </div>
-                <div className="serif mt-4" style={{ fontSize: 17, lineHeight: 1.2, minHeight: 42 }}>{m.nombre}</div>
-                <div className="small mt-2" style={{ color: 'var(--fg-muted)' }}>{m.cargo}</div>
-                <div className="comite-chip mt-4" style={{ color: m.comiteColor, borderColor: 'currentColor', justifyContent: 'center' }}>
-                  <span style={{ width: 6, height: 6, borderRadius: 99, background: m.comiteColor }} />{m.comite}
-                </div>
-                <div className="flex justify-between mt-4 mono small" style={{ color: 'var(--fg-muted)', fontSize: 11 }}>
-                  <span>{m.year} año</span><span>{m.semester}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+          {filtered.length === 0 ? (
+            <AdmEmpty img="assets/mascota/mascota-investiga.png?v=3" title="Nadie con esos filtros"
+              action={<button className="btn btn-ghost" onClick={() => { setQ(''); setFilterYear('todos'); setFilterComite('todos'); }}>Limpiar filtros</button>}>
+              Prueba con otro comité, otro año o un nombre distinto.
+            </AdmEmpty>
+          ) : (
+            <div className="pm-grid">
+              {filtered.map((m, i) => <MiembroCard key={m.nombre + i} m={m} />)}
+            </div>
+          )}
         </div>
       </section>
 
@@ -155,62 +171,62 @@ const ActividadesPage = () => {
   React.useEffect(cargar, []);
 
   const MESES = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
-  const fmtDia = (f) => { const m = String(f).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3] + ' ' + MESES[Number(m[2]) - 1] : ''; };
-  const fmtAnio = (f) => String(f).slice(0, 4);
+  const partes = (f) => { const m = String(f).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? { dia: m[3], mes: MESES[Number(m[2]) - 1], anio: m[1] } : { dia: '—', mes: '', anio: '' }; };
   const tags = ['todos'].concat(Array.from(new Set((items || []).map(i => i.tag).filter(Boolean))).sort());
   const filtered = (items || []).filter(i => tag === 'todos' || i.tag === tag);
 
   return (
     <div className="page-fade">
-      <section style={{ paddingTop: 64, paddingBottom: 32 }}>
-        <div className="container">
-          <div className="eyebrow">Actividades · Bitácora</div>
-          <h1 className="h-display mt-6" style={{ fontSize: 'clamp(44px, 5.5vw, 72px)' }}>
-            Lo que estamos<br/>construyendo.
-          </h1>
-        </div>
-      </section>
+      <PageHero
+        img="assets/banners/eventos-banner.jpg"
+        eyebrow="Actividades · Bitácora"
+        title={<>Lo que estamos <em>construyendo.</em></>}
+        lede="Eventos y publicaciones de la sociedad, del más reciente al más antiguo."
+      />
 
-      <section style={{ paddingTop: 16 }}>
+      <section className="p2-section">
         <div className="container">
           {fallo ? <LoadErrorCard onRetry={cargar}>No pudimos cargar las actividades. Revisa tu conexión e inténtalo de nuevo.</LoadErrorCard>
-          : items === null ? <p style={{ color: 'var(--fg-muted)' }}>Cargando actividades…</p>
-          : items.length === 0 ? (
-            <div className="card" style={{ padding: 48, textAlign: 'center', color: 'var(--fg-muted)' }}>
-              <img src="assets/mascota/mascota-investiga.png?v=3" alt="" style={{ width: 150, margin: '0 auto', display: 'block' }} onError={(e) => { e.currentTarget.outerHTML = ''; }} />
-              <p className="mt-3">Aún no hay actividades registradas. Visita <a href="#/eventos" style={{ color: 'var(--violet-600)' }}>Eventos</a> para las próximas fechas.</p>
+          : items === null ? (
+            <div className="pa-list" aria-busy="true" aria-label="Cargando actividades">
+              {[0, 1, 2, 3].map(i => <div key={i} className="skeleton pa-skel" />)}
             </div>
+          ) : items.length === 0 ? (
+            <AdmEmpty img="assets/mascota/mascota-investiga.png?v=3" title="Aún no hay actividades registradas"
+              action={<a className="btn btn-primary" href="#/eventos">Ver próximos eventos</a>}>
+              Cuando publiquemos eventos o noticias aparecerán aquí, en orden cronológico.
+            </AdmEmpty>
           ) : (
           <>
           {tags.length > 2 && (
-            <div className="flex gap-2 mb-8" style={{ flexWrap: 'wrap' }}>
-              {tags.map(t => (
-                <button key={t} className={`comite-chip ${tag === t ? 'active' : ''}`}
-                  onClick={() => setTag(t)}
-                  style={{ cursor: 'pointer', background: tag === t ? 'var(--violet-600)' : 'var(--bg-soft)', color: tag === t ? '#fff' : 'var(--fg-soft)', borderColor: tag === t ? 'var(--violet-600)' : 'var(--border)' }}>
-                  {t.toUpperCase()}
-                </button>
-              ))}
-            </div>
+            <AdmChips value={tag} onChange={setTag}
+              options={tags.map(t => ({ value: t, label: t === 'todos' ? 'Todo' : t }))} />
           )}
 
-          <div className="grid" style={{ gridTemplateColumns: '1fr', gap: 0 }}>
-            {filtered.map((it, i) => (
-              <article key={i} style={{ display: 'grid', gridTemplateColumns: '120px 1fr auto', gap: 32, padding: '32px 0', borderTop: '1px solid var(--border)', borderBottom: i === filtered.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                <div>
-                  <div className="serif" style={{ fontSize: 36, color: 'var(--violet-700)', lineHeight: 1 }}>{fmtDia(it.fecha)}</div>
-                  <div className="mono small mt-2" style={{ color: 'var(--fg-muted)' }}>{fmtAnio(it.fecha)}</div>
-                </div>
-                <div>
-                  <span className="comite-chip" style={{ color: 'var(--violet-600)', borderColor: 'currentColor' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: 99, background: 'var(--violet-600)' }} />{it.tag} · {it.tipo}
-                  </span>
-                  <h3 className="serif mt-4" style={{ fontSize: 30, lineHeight: 1.15 }}>{it.title}</h3>
-                  {it.body && <p className="mt-4" style={{ color: 'var(--fg-soft)', maxWidth: '70ch' }}>{String(it.body).slice(0, 220)}</p>}
-                </div>
-                <a className="btn-link" href={it.go} style={{ alignSelf: 'center' }}>Ver <Icon name="arrow" size={14} /></a>
-              </article>
-            ))}
+          <div className="pa-list">
+            {filtered.map((it, i) => {
+              const p = partes(it.fecha);
+              return (
+                <article key={i} className="pa-item">
+                  <div className="pa-date">
+                    <strong>{p.dia}</strong>
+                    <span>{p.mes}</span>
+                    <em>{p.anio}</em>
+                  </div>
+                  <div className="pa-main">
+                    <div className="pa-tags">
+                      <span className={'badge ' + (it.tipo === 'EVENTO' ? 'badge-violet' : '')}>{it.tipo}</span>
+                      <span className="pa-tag">{it.tag}</span>
+                    </div>
+                    <h3 className="pa-title">{it.title}</h3>
+                    {it.body && <p className="pa-desc">{String(it.body).slice(0, 220)}</p>}
+                  </div>
+                  <a className="action-circle pa-go" href={it.go} aria-label={'Ver ' + (it.title || 'actividad')}>
+                    <Icon name="arrowUpRight" size={18} />
+                  </a>
+                </article>
+              );
+            })}
           </div>
           </>
           )}
@@ -223,21 +239,28 @@ const ActividadesPage = () => {
 // ============ CONTACTO ============
 // Mapa Leaflet real apuntando a la Facultad de Medicina Humana · UNA Puno.
 // Coordenadas aproximadas Av. Floral, Ciudad Universitaria UNA: -15.8264, -70.0143
+// Teselas de OSM oscurecidas por CSS (.osm-dark). CARTO dark_all ya no sirve
+// sin API key: responde 200 con una tesela que dice "API KEY REQUIRED", así
+// que ni siquiera dispara tileerror.
 const UnaPunoMap = () => {
   const ref = React.useRef(null);
   React.useEffect(() => {
     if (!ref.current || !window.L) return;
-    const map = window.L.map(ref.current, { scrollWheelZoom: false }).setView([-15.8264, -70.0143], 16);
-    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap', maxZoom: 19
+    const L = window.L;
+    const centro = [-15.8264, -70.0143];
+    const map = L.map(ref.current, { scrollWheelZoom: false }).setView(centro, 16);
+    ref.current.classList.add('osm-dark');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 19
     }).addTo(map);
-    window.L.marker([-15.8264, -70.0143])
+    const pin = L.divIcon({ className: 'pc-pin-wrap', html: '<span class="pc-pin"></span>', iconSize: [18, 18], iconAnchor: [9, 9], popupAnchor: [0, -12] });
+    L.marker(centro, { icon: pin })
       .addTo(map)
-      .bindPopup('<b>SOCIEM-UNA</b><br/>Facultad de Medicina Humana<br/>Av. Floral 1153 · UNA Puno')
+      .bindPopup('<strong>SOCIEM-UNA</strong><br/>Facultad de Medicina Humana<br/>Av. Floral 1153 · UNA Puno')
       .openPopup();
     return () => map.remove();
   }, []);
-  return <div ref={ref} style={{ height: 280, borderRadius: 16, marginTop: 48, overflow: 'hidden', border: '1px solid var(--border)' }} />;
+  return <div ref={ref} className="pc-map" role="region" aria-label="Mapa de la Facultad de Medicina Humana, UNA Puno" />;
 };
 
 const ContactoPage = () => {
@@ -266,75 +289,105 @@ const ContactoPage = () => {
   const email     = (info && info.email_contacto)  || 'sociem.una@gmail.com';
   const facebook  = (info && info.url_facebook)    || 'https://www.facebook.com/share/1Ag5jhmu7K/';
   const instagram = (info && info.url_instagram)   || 'https://www.instagram.com/sociem_una_puno';
+  const comoLlegar = 'https://www.google.com/maps/dir/?api=1&destination=-15.8264,-70.0143';
+  // El @ visible sale de la URL configurada, para que nunca contradiga al enlace.
+  const igMatch = String(instagram).match(/instagram\.com\/([^/?#]+)/);
+  const igHandle = igMatch ? '@' + igMatch[1] : 'Síguenos';
   return (
   <div className="page-fade">
-    <section style={{ paddingTop: 64 }}>
+    <PageHero
+      img="assets/banners/contacto-banner.jpg"
+      eyebrow="Contacto"
+      title={<>Hablemos, <em>desde Puno.</em></>}
+      lede="¿Quieres colaborar con SOCIEM-UNA, invitarnos a un evento o sumarte como aliado institucional? Escríbenos."
+    />
+
+    <section className="p2-section">
       <div className="container">
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1.1fr', gap: 80 }}>
-          <div>
-            <div className="eyebrow">Contacto</div>
-            <h1 className="h-display mt-6" style={{ fontSize: 'clamp(44px, 5vw, 64px)' }}>Hablemos.</h1>
-            <p className="lede mt-6">¿Quieres colaborar con SOCIEM-UNA, invitarnos a un evento, o sumarte como aliado institucional? Escríbenos.</p>
-
-            <div className="grid mt-12" style={{ gap: 18, marginTop: 48 }}>
-              <div className="flex gap-4 items-center">
-                <div className="icon-btn" style={{ background: 'var(--violet-50)', color: 'var(--violet-700)' }}><Icon name="mail" size={16} /></div>
-                <div>
-                  <div className="mono small" style={{ color: 'var(--fg-muted)' }}>EMAIL</div>
-                  <a href={'mailto:' + email} style={{ fontWeight: 500 }}>{email}</a>
-                </div>
-              </div>
-              <div className="flex gap-4 items-center">
-                <div className="icon-btn" style={{ background: 'var(--violet-50)', color: 'var(--violet-700)' }}><Icon name="pin" size={16} /></div>
-                <div>
-                  <div className="mono small" style={{ color: 'var(--fg-muted)' }}>UBICACIÓN</div>
-                  <div style={{ fontWeight: 500 }}>Av. Floral 1153, Puno · FMH UNA</div>
-                </div>
-              </div>
-              <div className="flex gap-4 items-center">
-                <div className="icon-btn" style={{ background: 'var(--violet-50)', color: 'var(--violet-700)' }}><Icon name="phone" size={16} /></div>
-                <div>
-                  <div className="mono small" style={{ color: 'var(--fg-muted)' }}>TELÉFONO</div>
-                  <div style={{ fontWeight: 500 }}>+51 (51) 365-3000 anx. Medicina</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-10" style={{ marginTop: 48 }}>
-              <a className="icon-btn" aria-label="Facebook de SOCIEM-UNA" href={facebook} target="_blank" rel="noopener noreferrer"><Icon name="facebook" size={15} /></a>
-              <a className="icon-btn" aria-label="Instagram de SOCIEM-UNA" href={instagram} target="_blank" rel="noopener noreferrer"><Icon name="instagram" size={15} /></a>
-              <a className="icon-btn" aria-label="Escribir por correo" href={'mailto:' + email}><Icon name="mail" size={15} /></a>
-            </div>
-
-            <UnaPunoMap />
-          </div>
-
-          <div className="card" style={{ padding: '40px 44px' }}>
-            <h2 className="serif" style={{ fontSize: 32 }}>Escríbenos</h2>
-            <p className="small mt-2">Tu mensaje llega directo al correo institucional de la sociedad.</p>
+        <div className="pc-layout">
+          <div className="card pc-form">
             {envio === 'ok' ? (
-              <div className="mt-8" style={{ marginTop: 32, textAlign: 'center', padding: '32px 0' }}>
-                <img src="assets/mascota/mascota-formulario.png?v=3" alt="" style={{ width: 140, margin: '0 auto 6px', display: 'block' }} onError={(e) => { e.currentTarget.outerHTML = ''; }} />
-                <h3 className="serif mt-3" style={{ fontSize: 24 }}>Mensaje enviado</h3>
-                <p className="small mt-2" style={{ color: 'var(--fg-muted)' }}>Gracias por escribirnos. Te responderemos al correo que indicaste.</p>
-                <button className="btn mt-4" style={{ marginTop: 16 }} onClick={() => setEnvio('idle')}>Enviar otro mensaje</button>
+              <div className="pc-success" role="status">
+                <img src="assets/mascota/mascota-formulario.png?v=3" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                <div className="adm-overline">Recibido</div>
+                <h2 className="mt-2">Mensaje enviado</h2>
+                <p className="small mt-2">Gracias por escribirnos. Te responderemos al correo que indicaste.</p>
+                <button className="btn btn-ghost mt-6" onClick={() => setEnvio('idle')}>Enviar otro mensaje</button>
               </div>
             ) : (
-            <form className="grid mt-8 gap-4" style={{ marginTop: 32 }} onSubmit={enviar}>
-              <div className="grid col-2 gap-4">
-                <div className="field"><label>Nombre</label><input className="input" placeholder="Tu nombre completo" value={msg.nombre} onChange={(e) => setMsg({ ...msg, nombre: e.target.value })} required /></div>
-                <div className="field"><label>Email</label><input className="input" type="email" placeholder="tu@email.com" value={msg.email} onChange={(e) => setMsg({ ...msg, email: e.target.value })} required /></div>
-              </div>
-              <div className="field"><label>Asunto</label>
-                <select className="select" value={msg.asunto} onChange={(e) => setMsg({ ...msg, asunto: e.target.value })}><option>Quiero colaborar</option><option>Invitación a evento</option><option>Aliado institucional</option><option>Información general</option></select>
-              </div>
-              <div className="field"><label>Mensaje</label><textarea className="textarea" placeholder="Cuéntanos en qué podemos ayudarte..." value={msg.mensaje} onChange={(e) => setMsg({ ...msg, mensaje: e.target.value })} required /></div>
-              {envio === 'error' && envioErr && <p className="small" style={{ color: '#B3323A' }}>{envioErr}</p>}
-              <button className="btn btn-primary mt-4" style={{ marginTop: 8, justifyContent: 'center' }} disabled={envio === 'enviando'}>
-                {envio === 'enviando' ? 'Enviando…' : <>Enviar mensaje <Icon name="arrow" size={14} /></>}
-              </button>
-            </form>
+            <>
+              <div className="adm-overline">Formulario</div>
+              <h2 className="mt-2">Escríbenos</h2>
+              <p className="small mt-2">Tu mensaje llega directo al correo institucional de la sociedad.</p>
+              <form className="adm-form-grid pc-fields" onSubmit={enviar}>
+                <div className="adm-field">
+                  <label className="adm-field-label" htmlFor="pc-nombre">Nombre</label>
+                  <input id="pc-nombre" className="input" placeholder="Tu nombre completo" autoComplete="name" value={msg.nombre} onChange={(e) => setMsg({ ...msg, nombre: e.target.value })} required />
+                </div>
+                <div className="adm-field">
+                  <label className="adm-field-label" htmlFor="pc-email">Email</label>
+                  <input id="pc-email" className="input" type="email" placeholder="tu@email.com" autoComplete="email" value={msg.email} onChange={(e) => setMsg({ ...msg, email: e.target.value })} required />
+                </div>
+                <div className="adm-field adm-span-2">
+                  <label className="adm-field-label" htmlFor="pc-asunto">Asunto</label>
+                  <select id="pc-asunto" className="select" value={msg.asunto} onChange={(e) => setMsg({ ...msg, asunto: e.target.value })}><option>Quiero colaborar</option><option>Invitación a evento</option><option>Aliado institucional</option><option>Información general</option></select>
+                </div>
+                <div className="adm-field adm-span-2">
+                  <label className="adm-field-label" htmlFor="pc-mensaje">Mensaje</label>
+                  <textarea id="pc-mensaje" className="textarea" placeholder="Cuéntanos en qué podemos ayudarte..." value={msg.mensaje} onChange={(e) => setMsg({ ...msg, mensaje: e.target.value })} required />
+                </div>
+                {envio === 'error' && envioErr && (
+                  <div className="adm-error adm-span-2" role="alert"><Icon name="close" size={14} /><span>{envioErr}</span></div>
+                )}
+                <div className="adm-span-2 pc-submit">
+                  <button className="btn btn-primary" disabled={envio === 'enviando'}>
+                    {envio === 'enviando' ? <><span className="adm-spinner" /> Enviando…</> : <>Enviar mensaje <Icon name="arrow" size={14} /></>}
+                  </button>
+                </div>
+              </form>
+            </>
             )}
+          </div>
+
+          <aside className="pc-side">
+            <div className="adm-overline muted">Canales directos</div>
+            <div className="pc-channels">
+              <a className="pc-channel" href={'mailto:' + email}>
+                <span className="pc-channel-ico"><Icon name="mail" size={18} /></span>
+                <span className="pc-channel-txt"><span className="label">Email</span><strong>{email}</strong></span>
+                <Icon name="arrowUpRight" size={16} className="pc-channel-go" />
+              </a>
+              <a className="pc-channel" href={comoLlegar} target="_blank" rel="noopener noreferrer">
+                <span className="pc-channel-ico gold"><Icon name="pin" size={18} /></span>
+                <span className="pc-channel-txt"><span className="label">Ubicación</span><strong>Av. Floral 1153, Puno · FMH UNA</strong></span>
+                <Icon name="arrowUpRight" size={16} className="pc-channel-go" />
+              </a>
+              <div className="pc-channel">
+                <span className="pc-channel-ico"><Icon name="phone" size={18} /></span>
+                <span className="pc-channel-txt"><span className="label">Teléfono</span><strong>+51 (51) 365-3000 anx. Medicina</strong></span>
+              </div>
+              <a className="pc-channel" href={facebook} target="_blank" rel="noopener noreferrer" aria-label="Facebook de SOCIEM-UNA">
+                <span className="pc-channel-ico"><Icon name="facebook" size={18} /></span>
+                <span className="pc-channel-txt"><span className="label">Facebook</span><strong>SOCIEM-UNA Puno</strong></span>
+                <Icon name="arrowUpRight" size={16} className="pc-channel-go" />
+              </a>
+              <a className="pc-channel" href={instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram de SOCIEM-UNA">
+                <span className="pc-channel-ico"><Icon name="instagram" size={18} /></span>
+                <span className="pc-channel-txt"><span className="label">Instagram</span><strong>{igHandle}</strong></span>
+                <Icon name="arrowUpRight" size={16} className="pc-channel-go" />
+              </a>
+            </div>
+          </aside>
+        </div>
+
+        <div className="pc-map-wrap">
+          <UnaPunoMap />
+          <div className="pc-map-cap">
+            <div>
+              <div className="adm-overline muted">Dónde estamos</div>
+              <div className="pc-map-addr">Facultad de Medicina Humana · Ciudad Universitaria, UNA Puno</div>
+            </div>
+            <a className="btn btn-ghost btn-sm" href={comoLlegar} target="_blank" rel="noopener noreferrer">Cómo llegar <Icon name="arrowUpRight" size={14} /></a>
           </div>
         </div>
       </div>
@@ -353,6 +406,7 @@ const AdminLogin = ({ onLogin }) => {
   const [error, setError] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [showPass, setShowPass] = React.useState(false);
+  const [mayus, setMayus] = React.useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -375,39 +429,71 @@ const AdminLogin = ({ onLogin }) => {
       );
     }
   };
+  // Aviso de Bloq Mayús: la causa más común de "contraseña incorrecta".
+  const leerMayus = (e) => { if (e.getModifierState) setMayus(e.getModifierState('CapsLock')); };
+  const userMal = !!error && !user;
+  const passMal = !!error && !!user;
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg-soft)', padding: 24 }}>
-      <div className="card" style={{ width: '100%', maxWidth: 420, padding: '44px 40px' }}>
-        <div className="flex items-center gap-3 mb-8">
-          <Logo size={40} /><Wordmark />
-        </div>
-        <img src="assets/mascota/mascota-laptop.png?v=3" alt="" style={{ width: 120, margin: '0 auto 10px', display: 'block' }} onError={(e) => { e.currentTarget.outerHTML = ''; }} />
-        <div className="mono small">ACCESO INTERNO</div>
-        <h1 className="serif mt-2" style={{ fontSize: 30 }}>Panel administrativo</h1>
-        <p className="small mt-2">Ingresa con tus credenciales SOCIEM-UNA.</p>
-        <form className="grid mt-8 gap-4" onSubmit={submit}>
-          <div className="field"><label>Usuario</label><input className="input" value={user} onChange={e => setUser(e.target.value)} placeholder="admin" autoComplete="username" /></div>
-          <div className="field">
-            <label>Contraseña</label>
-            <div style={{ position: 'relative' }}>
-              <input className="input" type={showPass ? 'text' : 'password'} value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••••" autoComplete="current-password" style={{ width: '100%', paddingRight: 40 }} />
-              <button type="button" onClick={() => setShowPass(s => !s)} aria-label="Mostrar contraseña" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--fg-muted)' }}>
-                <Icon name="eye" size={16} />
-              </button>
-            </div>
+    <div className="adm-login">
+      <aside className="adm-login-art">
+        <img
+          src="assets/hero/admin-login.jpg" alt=""
+          onError={(e) => { const el = e.currentTarget; if (!el.dataset.fb) { el.dataset.fb = '1'; el.src = 'assets/hero/hero-altiplano.jpg'; } else { el.style.display = 'none'; } }}
+        />
+        <div className="hero-grain" aria-hidden="true" />
+        <div className="adm-login-art-inner">
+          <a className="adm-login-brand" href="#/home" aria-label="Volver al sitio de SOCIEM-UNA">
+            <Logo size={40} /><Wordmark inverse />
+          </a>
+          <div className="adm-login-quote">
+            <div className="adm-overline">Panel interno</div>
+            <h2>La ciencia se organiza <em>desde el altiplano.</em></h2>
+            <p>Eventos, certificados, miembros y tienda de SOCIEM-UNA en un solo lugar.</p>
           </div>
-          {error && (
-            <div className="small" style={{ color: 'var(--red)', padding: '8px 12px', background: 'rgba(200,16,46,.06)', borderRadius: 8 }}>
-              {error}
+        </div>
+      </aside>
+
+      <main className="adm-login-panel">
+        <div className="adm-login-box">
+          <img className="adm-login-mascota" src="assets/mascota/mascota-laptop.png?v=3" alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          <div className="adm-overline">Acceso interno</div>
+          <h1>Panel administrativo</h1>
+          <p className="adm-login-sub">Ingresa con tus credenciales SOCIEM-UNA.</p>
+          <form className="adm-login-form" onSubmit={submit} noValidate>
+            <div className="adm-field">
+              <label className="adm-field-label" htmlFor="adm-user">Usuario</label>
+              <input id="adm-user" className={'input' + (userMal ? ' is-invalid' : '')} value={user}
+                onChange={e => { setUser(e.target.value); if (error) setError(''); }}
+                placeholder="admin" autoComplete="username" aria-invalid={userMal} />
             </div>
-          )}
-          <button className="btn btn-primary mt-4" type="submit" disabled={loading} style={{ justifyContent: 'center', opacity: loading ? 0.6 : 1 }}>
-            <Icon name="lock" size={14} /> {loading ? 'Ingresando…' : 'Iniciar sesión'}
-          </button>
-          <span className="small mt-2" style={{ textAlign: 'center', color: 'var(--fg-muted)' }}>¿Olvidaste tu contraseña? Pídele al superadministrador que la restablezca desde Usuarios.</span>
-        </form>
-      </div>
+            <div className="adm-field">
+              <label className="adm-field-label" htmlFor="adm-pass">Contraseña</label>
+              <div className="adm-pass">
+                <input id="adm-pass" className={'input' + (passMal ? ' is-invalid' : '')} type={showPass ? 'text' : 'password'} value={pass}
+                  onChange={e => { setPass(e.target.value); if (error) setError(''); }}
+                  onKeyUp={leerMayus} onKeyDown={leerMayus}
+                  placeholder="••••••••••" autoComplete="current-password" aria-invalid={passMal} />
+                <button type="button" className="adm-pass-toggle" onClick={() => setShowPass(s => !s)}
+                  aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'} aria-pressed={showPass}>
+                  <Icon name={showPass ? 'close' : 'eye'} size={16} />
+                </button>
+              </div>
+              {mayus && <div className="adm-hint adm-caps"><Icon name="lock" size={12} /> Bloq Mayús está activado</div>}
+            </div>
+            {error && (
+              <div className="adm-error" role="alert"><Icon name="close" size={14} /><span>{error}</span></div>
+            )}
+            <button className="btn btn-primary" type="submit" disabled={loading}>
+              {loading ? <><span className="adm-spinner" /> Ingresando…</> : <><Icon name="lock" size={14} /> Iniciar sesión</>}
+            </button>
+          </form>
+          <div className="adm-login-foot">
+            <span>¿Olvidaste tu contraseña? Pídele al superadministrador que la restablezca desde Usuarios.</span>
+            <a href="#/home">← Volver al sitio</a>
+          </div>
+        </div>
+      </main>
     </div>
   );
 };
@@ -487,7 +573,8 @@ const adminApi = {
   }
 };
 
-// Hook de notificaciones tipo toast
+// Hook de notificaciones tipo toast: abajo al centro, en surface-3.
+// Firma estable { push(msg, kind), node }: kind = 'ok' | 'error' | 'info'.
 const useToast = () => {
   const [list, setList] = React.useState([]);
   const push = (msg, kind = 'info') => {
@@ -496,50 +583,72 @@ const useToast = () => {
     setTimeout(() => setList(t => t.filter(x => x.id !== id)), 4200);
   };
   const node = (
-    <div style={{ position:'fixed', bottom:24, right:24, display:'flex', flexDirection:'column', gap:8, zIndex:10000, maxWidth:400 }}>
-      {list.map(t => (
-        <div key={t.id} style={{
-          background:'var(--bg)', padding:'14px 18px', borderRadius:12,
-          boxShadow:'0 8px 24px rgba(0,0,0,.15)',
-          borderLeft: '4px solid ' + (t.kind==='error'?'var(--red)':t.kind==='ok'?'#1F6B3A':'var(--violet-600)'),
-          fontSize:14
-        }}>{t.msg}</div>
-      ))}
+    <div className="adm-toast-stack" role="status" aria-live="polite">
+      {list.map(t => {
+        const k = t.kind === 'error' ? 'err' : t.kind === 'ok' ? 'ok' : 'info';
+        return (
+          <div key={t.id} className={'adm-toast ' + k}>
+            <span className="adm-toast-ico"><Icon name={k === 'err' ? 'close' : k === 'ok' ? 'check' : 'bell'} size={13} /></span>
+            <span>{t.msg}</span>
+          </div>
+        );
+      })}
     </div>
   );
   return { push, node };
 };
 
-// Modal reutilizable
+// Modal reutilizable: surface-3, cabecera y pie fijos, cuerpo con scroll.
+// Solo cierra con clic en el fondo si el clic también EMPEZÓ en el fondo
+// (seleccionar texto y soltar fuera no debe descartar un formulario).
 const AdminModal = ({ open, onClose, title, children, footer, wide }) => {
+  const abajoEnFondo = React.useRef(false);
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
+  React.useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
   if (!open) return null;
   return (
-    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(15,10,30,.55)', display:'grid', placeItems:'center', zIndex:9000, padding:24 }}>
-      <div onClick={e => e.stopPropagation()} className="card" style={{ width:'100%', maxWidth: wide ? 720 : 520, padding:0, maxHeight:'90vh', display:'flex', flexDirection:'column' }}>
-        <div className="flex justify-between items-center" style={{ padding:'22px 28px', borderBottom:'1px solid var(--border)' }}>
-          <h2 className="serif" style={{ fontSize:22, margin:0 }}>{title}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Cerrar"><Icon name="close" size={16} /></button>
+    <div className="adm-modal-backdrop"
+      onMouseDown={e => { abajoEnFondo.current = e.target === e.currentTarget; }}
+      onClick={e => { if (abajoEnFondo.current && e.target === e.currentTarget) onClose(); }}>
+      <div className={'adm-modal' + (wide ? ' wide' : '')} role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined}>
+        <div className="adm-modal-head">
+          <h3>{title}</h3>
+          <button type="button" className="adm-icon-btn" onClick={onClose} aria-label="Cerrar"><Icon name="close" size={16} /></button>
         </div>
-        <div style={{ padding:'24px 28px', overflow:'auto', flex:1 }}>{children}</div>
-        {footer && <div className="flex justify-end gap-3" style={{ padding:'18px 28px', borderTop:'1px solid var(--border)' }}>{footer}</div>}
+        <div className="adm-modal-body">{children}</div>
+        {footer && <div className="adm-modal-foot">{footer}</div>}
       </div>
     </div>
   );
 };
 
-const AdminField = ({ label, children, hint, span }) => (
-  <div className="field" style={{ marginBottom: 14, gridColumn: span ? '1 / -1' : 'auto' }}>
-    <label style={{ display:'block', marginBottom:6, fontSize:13, fontWeight:500 }}>{label}</label>
-    {children}
-    {hint && <div className="small" style={{ color:'var(--fg-muted)', fontSize:12, marginTop:4 }}>{hint}</div>}
-  </div>
-);
+// Campo de formulario: label en versales, hint gris. Un " *" al final del
+// label se dibuja como marca de obligatorio. `span` ocupa las dos columnas.
+const AdminField = ({ label, children, hint, span }) => {
+  const txt = typeof label === 'string' ? label : null;
+  const req = !!(txt && /\s\*$/.test(txt));
+  return (
+    <div className={'adm-field' + (span ? ' adm-span-2' : '')}>
+      {label != null && label !== '' && (
+        <label className="adm-field-label">
+          {req ? txt.replace(/\s\*$/, '') : label}{req && <span className="req" aria-hidden="true">*</span>}
+        </label>
+      )}
+      {children}
+      {hint && <div className="adm-hint">{hint}</div>}
+    </div>
+  );
+};
 
 // Input de imagen con detección automática de Drive + preview en vivo.
 // Acepta:
@@ -555,58 +664,154 @@ const DriveImageInput = ({ value, onChange, placeholder, hint }) => {
   const [errored, setErrored] = React.useState(false);
   React.useEffect(() => { setErrored(false); }, [value]);
   return (
-    <div>
+    <div className="adm-img-field">
       <input
         className="input"
         value={value || ''}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder || 'https://drive.google.com/file/d/... o URL directa'}
       />
-      <div style={{ marginTop:12, display:'flex', alignItems:'flex-start', gap:14 }}>
+      <div className="adm-img-input">
         {value ? (
           errored ? (
-            <div style={{ width:96, height:96, borderRadius:12, background:'#fee', border:'1px solid #fcc', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--red)', fontSize:11, textAlign:'center', padding:8, flexShrink:0 }}>
-              No carga · revisa permisos
-            </div>
+            <div className="adm-img-preview is-error"><Icon name="image" size={18} /><span>No carga</span></div>
           ) : (
-            <img
-              src={preview}
-              alt="Vista previa"
-              style={{ width:96, height:96, objectFit:'cover', borderRadius:12, border:'1px solid var(--border)', flexShrink:0, background:'var(--bg-soft)' }}
-              onError={() => setErrored(true)}
-            />
+            <div className="adm-img-preview"><img src={preview} alt="Vista previa" onError={() => setErrored(true)} /></div>
           )
         ) : (
-          <div style={{ width:96, height:96, borderRadius:12, background:'var(--bg-soft)', border:'1px dashed var(--border)', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--fg-muted)', fontSize:11, flexShrink:0 }}>
-            Vista previa
-          </div>
+          <div className="adm-img-preview is-empty"><Icon name="image" size={20} /></div>
         )}
-        <div className="small" style={{ color:'var(--fg-muted)', flex:1, lineHeight:1.5, fontSize:12 }}>
-          {isDrive
-            ? <span><strong style={{ color:'var(--violet-700)' }}>✓ Link de Google Drive detectado</strong> — se servirá vía endpoint thumbnail. <strong>Importante:</strong> el archivo debe estar compartido como “Cualquier persona con el enlace puede ver”.</span>
-            : value
-              ? 'URL externa o ruta local. Se usará tal cual.'
-              : <span>Pega aquí el link de Drive (botón “Compartir” → “Copiar enlace”) o una URL pública de imagen.</span>}
+        <div className="adm-hint adm-img-input-main">
+          {errored
+            ? <span className="adm-txt-err">No se pudo cargar la imagen: revisa la URL o que el archivo de Drive esté compartido como “Cualquier persona con el enlace puede ver”.</span>
+            : isDrive
+              ? <span><strong className="adm-txt-ok">Link de Google Drive detectado.</strong> Se servirá vía endpoint thumbnail. <strong>Importante:</strong> el archivo debe estar compartido como “Cualquier persona con el enlace puede ver”.</span>
+              : value
+                ? 'URL externa o ruta local. Se usará tal cual.'
+                : <span>Pega aquí el link de Drive (botón “Compartir” → “Copiar enlace”) o una URL pública de imagen.</span>}
         </div>
       </div>
-      {hint && <div className="small" style={{ color:'var(--fg-muted)', fontSize:12, marginTop:8 }}>{hint}</div>}
+      {hint && <div className="adm-hint">{hint}</div>}
     </div>
   );
 };
 
+// Badge de estado semántico: verde = vigente/aprobado, ámbar = pendiente,
+// rojo = inactivo/anulado, violeta = egresado/realizado. Lo desconocido va neutro.
+const ESTADO_TONO = {
+  ACTIVO: 'green', APROBADO: 'green', APROBADA: 'green', PAGADO: 'green', PUBLICADO: 'green', EMITIDO: 'green',
+  VALIDO: 'green', ENTREGADO: 'green', CONFIRMADO: 'green', ABIERTO: 'green', ACTIVA: 'green',
+  PENDIENTE: 'warn', BORRADOR: 'warn', EN_PROCESO: 'warn', POR_PAGAR: 'warn', PROGRAMADO: 'warn',
+  INACTIVO: 'red', RECHAZADO: 'red', RECHAZADA: 'red', ANULADO: 'red', CANCELADO: 'red', ELIMINADO: 'red', INACTIVA: 'red',
+  EGRESADO: 'violet', REALIZADO: 'violet', FINALIZADO: 'violet',
+};
 const EstadoBadge = ({ value }) => {
-  const styles = {
-    ACTIVO:    { bg:'#E8F5EC', fg:'#1F6B3A', bd:'#C8E6CD' },
-    PENDIENTE: { bg:'#FBF4DD', fg:'#8C7321', bd:'#F0E2B0' },
-    INACTIVO:  { bg:'#FAEAEA', fg:'#8C2121', bd:'#F0BBBB' },
-    EGRESADO:  { bg:'#E8EEF5', fg:'#21478C', bd:'#BBCCF0' },
-  };
-  const s = styles[value] || styles.PENDIENTE;
-  return <span className="badge" style={{ background:s.bg, color:s.fg, borderColor:s.bd }}><span className="badge-dot" />{value || '—'}</span>;
+  const tono = ESTADO_TONO[String(value || '').toUpperCase()];
+  return <span className={'badge' + (tono ? ' badge-' + tono : '')}><span className="badge-dot" />{value ? String(value).replace(/_/g, ' ') : '—'}</span>;
 };
 
+// ───── Piezas reutilizables del panel (también las usan pages-4/pages-5) ─────
+// Cabecera de sección: título opcional, descripción y acciones a la derecha.
+const AdmPageHead = ({ overline, title, sub, actions }) => (
+  <div className="adm-page-head">
+    <div>
+      {overline && <div className="adm-overline">{overline}</div>}
+      {title && <h2 className="adm-page-title">{title}</h2>}
+      {sub && <p className="adm-page-sub">{sub}</p>}
+    </div>
+    {actions && <div className="adm-page-actions">{actions}</div>}
+  </div>
+);
+
+// Buscador píldora con lupa. Props extra van al <input>.
+const AdmSearch = ({ value, onChange, placeholder, ...rest }) => (
+  <label className="adm-search">
+    <span className="adm-search-ico" aria-hidden="true"><Icon name="search" size={16} /></span>
+    <input className="input" type="search" value={value} onChange={e => onChange(e.target.value)}
+      placeholder={placeholder || 'Buscar…'} aria-label={placeholder || 'Buscar'} {...rest} />
+  </label>
+);
+
+// Fila de chips de filtro. options: [{ value, label, count?, dot? }].
+const AdmChips = ({ options, value, onChange }) => (
+  <div className="adm-filters">
+    {options.map(o => (
+      <button key={String(o.value)} type="button" className={'chip' + (value === o.value ? ' active' : '')}
+        aria-pressed={value === o.value} onClick={() => onChange(o.value)}>
+        {o.dot && <span className="adm-dot" style={{ background: o.dot }} />}
+        {o.label}
+        {o.count != null && <span className="adm-chip-count">{o.count}</span>}
+      </button>
+    ))}
+  </div>
+);
+
+// Estado vacío con mascota (img={false} la quita).
+const AdmEmpty = ({ title, children, action, img }) => (
+  <div className="adm-empty">
+    {img !== false && (
+      <img className="adm-empty-img" src={img || 'assets/mascota/mascota-lectura.png?v=3'} alt=""
+        onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+    )}
+    {title && <h3>{title}</h3>}
+    {children && <p>{children}</p>}
+    {action}
+  </div>
+);
+
+// Filas skeleton mientras carga una tabla.
+const AdmSkeleton = ({ rows = 5 }) => (
+  <div className="adm-table-wrap adm-skel" aria-busy="true" aria-label="Cargando">
+    <div className="adm-skel-head" />
+    {Array.from({ length: rows }).map((_, i) => <div key={i} className="skeleton adm-skel-row" />)}
+  </div>
+);
+
+// Miniatura de fila (40px). Si la imagen falla o no hay, iniciales.
+const AdmThumb = ({ src, name, round, contain }) => {
+  const [rota, setRota] = React.useState(false);
+  React.useEffect(() => { setRota(false); }, [src]);
+  const cls = 'adm-row-thumb' + (round ? ' round' : '') + (contain ? ' contain' : '');
+  return (
+    <span className={cls} aria-hidden="true">
+      {src && !rota ? <img src={src} alt="" loading="lazy" onError={() => setRota(true)} /> : p2Iniciales(name)}
+    </span>
+  );
+};
+
+// Booleano como badge: "Sí" verde / "No" neutro. Solo true estricto es Sí.
+const AdmBool = ({ value, si = 'Sí', no = 'No' }) => (
+  value === true
+    ? <span className="badge badge-green"><span className="badge-dot" />{si}</span>
+    : <span className="badge"><span className="badge-dot" />{no}</span>
+);
+
+// Botón de icono para acciones de fila.
+const AdmIconBtn = ({ icon, title, onClick, tone, disabled }) => (
+  <button type="button" className={'adm-icon-btn' + (tone ? ' ' + tone : '')} title={title} aria-label={title} onClick={onClick} disabled={disabled}>
+    <Icon name={icon} size={15} />
+  </button>
+);
+
 // Exporta helpers admin para que pages-4.jsx (secciones nuevas) los reutilice.
-Object.assign(window, { adminApi, useToast, AdminModal, AdminField, DriveImageInput, EstadoBadge });
+Object.assign(window, {
+  adminApi, useToast, AdminModal, AdminField, DriveImageInput, EstadoBadge,
+  AdmPageHead, AdmSearch, AdmChips, AdmEmpty, AdmSkeleton, AdmThumb, AdmBool, AdmIconBtn
+});
+
+// Acciones estándar de la cabecera de sección: Recargar + Nuevo.
+const p2Acciones = (reload, nuevo, txtNuevo) => (
+  <>
+    <button className="btn btn-ghost btn-sm" onClick={reload}><Icon name="refresh" size={14} /> Recargar</button>
+    {nuevo && <button className="btn btn-primary btn-sm" onClick={nuevo}><Icon name="plus" size={14} /> {txtNuevo}</button>}
+  </>
+);
+const p2Pie = (onCancel, onSave) => (
+  <>
+    <button className="btn btn-ghost" onClick={onCancel}>Cancelar</button>
+    <button className="btn btn-primary" onClick={onSave}>Guardar</button>
+  </>
+);
 
 // ───── Sección: Miembros (CRUD completo) ─────
 const AdminSectionMiembros = ({ toast }) => {
@@ -659,79 +864,76 @@ const AdminSectionMiembros = ({ toast }) => {
     return [m.nombres, m.apellidos, m.email, m.comite_interes_1, m.codigo_universitario]
       .some(v => String(v||'').toLowerCase().includes(q));
   });
+  const nuevo = () => setEditing({ estado:'ACTIVO', publico:false, semestre:1 });
+  const ESTADOS = ['ACTIVO','PENDIENTE','INACTIVO','EGRESADO'];
 
   return (
     <>
-      <div className="flex justify-between items-center mb-6" style={{ flexWrap:'wrap', gap:12 }}>
-        <div className="flex gap-3 items-center" style={{ flex:1, minWidth:280 }}>
-          <div style={{ position:'relative', flex:1, maxWidth:420 }}>
-            <input className="input" placeholder="Buscar por nombre, email, comité..." value={search} onChange={e=>setSearch(e.target.value)} style={{ paddingLeft:42, width:'100%' }} />
-            <Icon name="search" size={16} style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', color:'var(--fg-muted)' }} />
-          </div>
-          <select className="select" value={filterEstado} onChange={e=>setFilterEstado(e.target.value)}>
-            <option value="">Todos los estados</option>
-            <option>ACTIVO</option><option>PENDIENTE</option><option>INACTIVO</option><option>EGRESADO</option>
-          </select>
-        </div>
-        <div className="flex gap-2">
-          <button className="btn btn-ghost" onClick={reload} style={{ padding:'10px 16px' }}>Recargar</button>
-          <button className="btn btn-primary" onClick={() => setEditing({ estado:'ACTIVO', publico:false, semestre:1 })} style={{ padding:'10px 16px' }}>
-            <Icon name="plus" size={14} /> Nuevo miembro
-          </button>
-        </div>
+      <AdmPageHead
+        sub="Padrón de la sociedad: aprueba inscripciones, edita datos y decide quién aparece en la galería pública."
+        actions={p2Acciones(reload, nuevo, 'Nuevo miembro')} />
+
+      <div className="adm-toolbar">
+        <AdmSearch value={search} onChange={setSearch} placeholder="Buscar por nombre, email, comité..." />
+        <AdmChips value={filterEstado} onChange={setFilterEstado}
+          options={[{ value:'', label:'Todos', count: items.length }].concat(ESTADOS.map(e => ({ value:e, label:p2Titulo(e), count: items.filter(m => m.estado === e).length })))} />
+        <span className="adm-toolbar-spacer" />
+        <span className="adm-count">Mostrando {filtered.length} de {items.length}</span>
       </div>
 
-      {loading ? (
-        <div className="card" style={{ padding:32, textAlign:'center', color:'var(--fg-muted)' }}>Cargando…</div>
-      ) : items.length === 0 ? (
-        <div className="card" style={{ padding:48, textAlign:'center' }}>
-          <p style={{ marginBottom:16, color:'var(--fg-soft)' }}>No hay miembros registrados aún.</p>
-          <button className="btn btn-primary" onClick={() => setEditing({ estado:'ACTIVO', publico:false, semestre:1 })}>Agregar el primero</button>
-        </div>
+      {loading ? <AdmSkeleton /> : items.length === 0 ? (
+        <AdmEmpty title="No hay miembros registrados aún"
+          action={<button className="btn btn-primary" onClick={nuevo}><Icon name="plus" size={14} /> Agregar el primero</button>}>
+          Registra al primer miembro a mano o importa las respuestas del formulario de inscripción desde Formularios.
+        </AdmEmpty>
       ) : (
-        <table className="admin-table">
-          <thead>
-            <tr><th>Nombre</th><th>Email</th><th>Código</th><th>Comité</th><th>Sem.</th><th>Estado</th><th></th></tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && <tr><td colSpan={7} style={{ color:'var(--fg-muted)', padding:20 }}>Sin resultados para tu búsqueda o filtro.</td></tr>}
-            {filtered.map(m => (
-              <tr key={m.id}>
-                <td><strong>{((m.nombres||'') + ' ' + (m.apellidos||'')).trim() || '—'}</strong></td>
-                <td className="small" style={{ color:'var(--fg-soft)' }}>{m.email}</td>
-                <td className="mono small">{m.codigo_universitario || '—'}</td>
-                <td><span className="comite-chip">{m.comite_interes_1 || '—'}</span></td>
-                <td>{m.semestre || '—'}</td>
-                <td><EstadoBadge value={m.estado} /></td>
-                <td>
-                  <div className="flex gap-2">
-                    {m.estado === 'PENDIENTE' && (<>
-                      <button className="icon-btn" title="Aprobar" onClick={()=>approve(m)} style={{ width:28, height:28, color:'#1F6B3A' }}><Icon name="check" size={13} /></button>
-                      <button className="icon-btn" title="Rechazar" onClick={()=>reject(m)} style={{ width:28, height:28, color:'var(--red)' }}><Icon name="close" size={13} /></button>
-                    </>)}
-                    <button className="icon-btn" title="Editar" onClick={()=>setEditing(m)} style={{ width:28, height:28 }}><Icon name="edit" size={13} /></button>
-                    <button className="icon-btn" title="Eliminar" onClick={()=>remove(m)} style={{ width:28, height:28 }}><Icon name="trash" size={13} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="adm-table-wrap">
+          <table className="admin-table adm-table">
+            <thead>
+              <tr><th>Miembro</th><th>Código</th><th>Comité</th><th className="adm-num">Sem.</th><th>Estado</th><th><span className="adm-sr">Acciones</span></th></tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && <tr><td colSpan={6} className="adm-td-empty">Sin resultados para tu búsqueda o filtro.</td></tr>}
+              {filtered.map(m => {
+                const nombre = ((m.nombres||'') + ' ' + (m.apellidos||'')).trim();
+                return (
+                  <tr key={m.id}>
+                    <td>
+                      <div className="adm-cell-main">
+                        <AdmThumb src={IMG(m.foto_url)} name={nombre} round />
+                        <div>
+                          <div className="adm-cell-title">{nombre || '—'}</div>
+                          <div className="adm-cell-sub">{m.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="adm-mono">{m.codigo_universitario || '—'}</td>
+                    <td>{m.comite_interes_1 ? <span className="comite-chip">{m.comite_interes_1}</span> : '—'}</td>
+                    <td className="adm-num">{m.semestre || '—'}</td>
+                    <td><EstadoBadge value={m.estado} /></td>
+                    <td className="adm-actions">
+                      {m.estado === 'PENDIENTE' && (<>
+                        <AdmIconBtn icon="check" title="Aprobar" tone="ok" onClick={() => approve(m)} />
+                        <AdmIconBtn icon="close" title="Rechazar" tone="danger" onClick={() => reject(m)} />
+                      </>)}
+                      <AdmIconBtn icon="edit" title="Editar" onClick={() => setEditing(m)} />
+                      <AdmIconBtn icon="trash" title="Eliminar" tone="danger" onClick={() => remove(m)} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
-      <div className="flex justify-between items-center mt-6" style={{ marginTop:16 }}>
-        <span className="small" style={{ color:'var(--fg-muted)' }}>Mostrando {filtered.length} de {items.length}</span>
-      </div>
 
       <AdminModal
         open={!!editing} onClose={()=>setEditing(null)} wide
         title={editing && editing.id ? 'Editar miembro' : 'Nuevo miembro'}
-        footer={<>
-          <button className="btn btn-ghost" onClick={()=>setEditing(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save}>Guardar</button>
-        </>}
+        footer={p2Pie(() => setEditing(null), save)}
       >
         {editing && (
-          <div className="grid col-2 gap-4">
+          <div className="adm-form-grid">
             <AdminField label="Nombres *"><input className="input" value={editing.nombres||''} onChange={e=>setEditing({...editing, nombres:e.target.value})} /></AdminField>
             <AdminField label="Apellidos *"><input className="input" value={editing.apellidos||''} onChange={e=>setEditing({...editing, apellidos:e.target.value})} /></AdminField>
             <AdminField label="Email *"><input className="input" type="email" value={editing.email||''} onChange={e=>setEditing({...editing, email:e.target.value})} /></AdminField>
@@ -760,9 +962,9 @@ const AdminSectionMiembros = ({ toast }) => {
               <DriveImageInput value={editing.foto_url||''} onChange={v => setEditing({...editing, foto_url:v})} />
             </AdminField>
             <AdminField label="Visible en galería pública">
-              <label className="flex items-center gap-2" style={{ marginTop:8 }}>
+              <label className="adm-switch">
                 <input type="checkbox" checked={!!editing.publico} onChange={e=>setEditing({...editing, publico:e.target.checked})} />
-                <span className="small">Mostrar en /miembros</span>
+                <span>Mostrar en /miembros</span>
               </label>
             </AdminField>
             <AdminField label="Observaciones"><input className="input" value={editing.observaciones||''} onChange={e=>setEditing({...editing, observaciones:e.target.value})} /></AdminField>
@@ -802,68 +1004,65 @@ const AdminSectionDirectorio = ({ toast }) => {
     catch (e) { toast.push(e.message,'error'); }
   };
   const filtered = filterConsejo ? items.filter(i => i.consejo === filterConsejo) : items;
+  const nuevo = () => setEditing({ consejo:'EJECUTIVO', activo:true, gestion:'2026', orden:0 });
+  const consejoLabel = (v) => (CONSEJOS_OPCIONES.find(c => c.value === v) || {}).label || v || '—';
 
   return (
     <>
-      <div className="flex justify-between items-center mb-6" style={{ flexWrap:'wrap', gap:12 }}>
-        <select className="select" value={filterConsejo} onChange={e=>setFilterConsejo(e.target.value)}>
-          <option value="">Todos los consejos ({items.length})</option>
-          {CONSEJOS_OPCIONES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-        </select>
-        <div className="flex gap-2">
-          <button className="btn btn-ghost" onClick={reload} style={{ padding:'10px 16px' }}>Recargar</button>
-          <button className="btn btn-primary" onClick={() => setEditing({ consejo:'EJECUTIVO', activo:true, gestion:'2026', orden:0 })} style={{ padding:'10px 16px' }}>
-            <Icon name="plus" size={14} /> Nuevo cargo
-          </button>
-        </div>
+      <AdmPageHead
+        sub="Cargos de la directiva que se publican en la página Directorio, agrupados por consejo."
+        actions={p2Acciones(reload, nuevo, 'Nuevo cargo')} />
+
+      <div className="adm-toolbar">
+        <AdmChips value={filterConsejo} onChange={setFilterConsejo}
+          options={[{ value:'', label:'Todos los consejos', count: items.length }].concat(CONSEJOS_OPCIONES.map(c => ({ value:c.value, label:c.label, count: items.filter(i => i.consejo === c.value).length })))} />
       </div>
 
-      {loading ? <div className="card" style={{ padding:32, textAlign:'center' }}>Cargando…</div> :
+      {loading ? <AdmSkeleton /> :
        filtered.length === 0 ? (
-         <div className="card" style={{ padding:48, textAlign:'center', color:'var(--fg-muted)' }}>
-           <p>No hay cargos. Si recién corriste el bootstrap, ejecuta <code>bootstrap_seedDirectorio()</code> en el editor de Apps Script.</p>
-         </div>
+         items.length === 0 ? (
+           <AdmEmpty title="No hay cargos"
+             action={<button className="btn btn-primary" onClick={nuevo}><Icon name="plus" size={14} /> Nuevo cargo</button>}>
+             Si recién corriste el bootstrap, ejecuta <code>bootstrap_seedDirectorio()</code> en el editor de Apps Script.
+           </AdmEmpty>
+         ) : <AdmEmpty img={false} title="Sin cargos en este consejo">Elige otro consejo o crea un cargo nuevo.</AdmEmpty>
        ) : (
-        <table className="admin-table">
-          <thead><tr><th></th><th>Cargo</th><th>Persona</th><th>Consejo</th><th>Activo</th><th></th></tr></thead>
-          <tbody>
-            {filtered.map(d => (
-              <tr key={d.id}>
-                <td>
-                  {d.foto_url ? (
-                    <img src={IMG(d.foto_url)} alt={d.nombre_completo} style={{ width:36, height:36, borderRadius:99, objectFit:'cover' }} onError={e => { e.currentTarget.style.display='none'; }} />
-                  ) : (
-                    <div style={{ width:36, height:36, borderRadius:99, background:'var(--violet-100)', color:'var(--violet-700)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:600 }}>
-                      {(d.nombre_completo||'?').split(' ').map(s=>s[0]).slice(0,2).join('')}
+        <div className="adm-table-wrap">
+          <table className="admin-table adm-table">
+            <thead><tr><th>Cargo</th><th>Persona</th><th>Consejo</th><th>Activo</th><th><span className="adm-sr">Acciones</span></th></tr></thead>
+            <tbody>
+              {filtered.map(d => (
+                <tr key={d.id}>
+                  <td>
+                    <div className="adm-cell-main">
+                      <AdmThumb src={IMG(d.foto_url)} name={d.nombre_completo} round />
+                      <div>
+                        <div className="adm-cell-title">{d.cargo_nombre}</div>
+                        <div className="adm-cell-sub adm-mono">{d.cargo_codigo}</div>
+                      </div>
                     </div>
-                  )}
-                </td>
-                <td><strong>{d.cargo_nombre}</strong><br/><span className="mono small" style={{ color:'var(--fg-muted)' }}>{d.cargo_codigo}</span></td>
-                <td>{d.nombre_completo || <span style={{ color:'var(--fg-muted)' }}>—</span>}</td>
-                <td><span className="badge">{d.consejo}</span></td>
-                <td>{d.activo === true ? '✓' : '✗'}</td>
-                <td>
-                  <div className="flex gap-2">
-                    <button className="icon-btn" title="Editar" onClick={()=>setEditing(d)} style={{ width:28, height:28 }}><Icon name="edit" size={13} /></button>
-                    <button className="icon-btn" title="Eliminar" onClick={()=>remove(d)} style={{ width:28, height:28 }}><Icon name="trash" size={13} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </td>
+                  <td>{d.nombre_completo || <span className="adm-muted">—</span>}</td>
+                  <td><span className="badge">{consejoLabel(d.consejo)}</span></td>
+                  <td><AdmBool value={d.activo} /></td>
+                  <td className="adm-actions">
+                    <AdmIconBtn icon="edit" title="Editar" onClick={() => setEditing(d)} />
+                    <AdmIconBtn icon="trash" title="Eliminar" tone="danger" onClick={() => remove(d)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
        )}
 
       <AdminModal
         open={!!editing} onClose={()=>setEditing(null)} wide
         title={editing && editing.id ? 'Editar cargo del directorio' : 'Nuevo cargo'}
-        footer={<>
-          <button className="btn btn-ghost" onClick={()=>setEditing(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save}>Guardar</button>
-        </>}
+        footer={p2Pie(() => setEditing(null), save)}
       >
         {editing && (
-          <div className="grid col-2 gap-4">
+          <div className="adm-form-grid">
             <AdminField label="Consejo *">
               <select className="select" value={editing.consejo||'EJECUTIVO'} onChange={e=>setEditing({...editing, consejo:e.target.value})}>
                 {CONSEJOS_OPCIONES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
@@ -893,9 +1092,9 @@ const AdminSectionDirectorio = ({ toast }) => {
             <AdminField label="Gestión"><input className="input" value={editing.gestion||'2026'} onChange={e=>setEditing({...editing, gestion:e.target.value})} /></AdminField>
             <AdminField span label="Descripción"><input className="input" value={editing.descripcion||''} onChange={e=>setEditing({...editing, descripcion:e.target.value})} /></AdminField>
             <AdminField label="Activo">
-              <label className="flex items-center gap-2" style={{ marginTop:8 }}>
+              <label className="adm-switch">
                 <input type="checkbox" checked={editing.activo !== false} onChange={e=>setEditing({...editing, activo:e.target.checked})} />
-                <span className="small">Visible en el sitio</span>
+                <span>Visible en el sitio</span>
               </label>
             </AdminField>
           </div>
@@ -948,59 +1147,63 @@ const AdminSectionComites = ({ toast }) => {
   };
 
   const filtered = filterTipo ? items.filter(i => i.tipo === filterTipo) : items;
+  const nuevo = () => setEditing({ tipo:'IFMSA', activo:true, color_hex:'#7B1FA2', icono:'layers' });
 
   return (
     <>
-      <div className="flex justify-between items-center mb-6" style={{ flexWrap:'wrap', gap:12 }}>
-        <select className="select" value={filterTipo} onChange={e=>setFilterTipo(e.target.value)}>
-          <option value="">Todos los tipos ({items.length})</option>
-          {TIPOS_COMITE.map(t => <option key={t}>{t}</option>)}
-        </select>
-        <div className="flex gap-2">
-          <button className="btn btn-ghost" onClick={reload} style={{ padding:'10px 16px' }}>Recargar</button>
-          <button className="btn btn-primary" onClick={() => setEditing({ tipo:'IFMSA', activo:true, color_hex:'#7B1FA2', icono:'layers' })} style={{ padding:'10px 16px' }}>
-            <Icon name="plus" size={14} /> Nuevo comité
-          </button>
-        </div>
+      <AdmPageHead
+        sub="Comités IFMSA, SOCIMEP y divisiones de soporte: nombre, color, objetivos y visibilidad."
+        actions={p2Acciones(reload, nuevo, 'Nuevo comité')} />
+
+      <div className="adm-toolbar">
+        <AdmChips value={filterTipo} onChange={setFilterTipo}
+          options={[{ value:'', label:'Todos los tipos', count: items.length }].concat(TIPOS_COMITE.map(t => ({ value:t, label:p2Titulo(t), count: items.filter(i => i.tipo === t).length })))} />
       </div>
 
-      {loading ? <div className="card" style={{ padding:32, textAlign:'center' }}>Cargando…</div> :
+      {loading ? <AdmSkeleton /> :
        filtered.length === 0 ? (
-         <div className="card" style={{ padding:48, textAlign:'center', color:'var(--fg-muted)' }}>
-           <p>Sin comités. Ejecuta <code>bootstrap_seedComites()</code> en el editor de Apps Script.</p>
-         </div>
+         <AdmEmpty title="Sin comités">
+           {items.length === 0 ? <>Ejecuta <code>bootstrap_seedComites()</code> en el editor de Apps Script.</> : 'No hay comités de este tipo.'}
+         </AdmEmpty>
        ) : (
-        <table className="admin-table">
-          <thead><tr><th>Código</th><th>Nombre completo</th><th>Tipo</th><th>Activo</th><th></th></tr></thead>
-          <tbody>
-            {filtered.map(c => (
-              <tr key={c.codigo}>
-                <td><strong style={{ color:c.color_hex }}>{c.codigo}</strong></td>
-                <td>{c.nombre_completo}<br/><span className="small" style={{ color:'var(--fg-muted)' }}>{c.nombre_corto || ''}</span></td>
-                <td><span className="badge">{c.tipo}</span></td>
-                <td>{c.activo === true ? '✓' : '✗'}</td>
-                <td>
-                  <div className="flex gap-2">
-                    <button className="icon-btn" title="Editar" onClick={()=>setEditing({...c, _original:{ codigo:c.codigo }})} style={{ width:28, height:28 }}><Icon name="edit" size={13} /></button>
-                    <button className="icon-btn" title="Desactivar" onClick={()=>remove(c)} style={{ width:28, height:28 }}><Icon name="trash" size={13} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="adm-table-wrap">
+          <table className="admin-table adm-table">
+            <thead><tr><th>Comité</th><th>Nombre completo</th><th>Tipo</th><th>Activo</th><th><span className="adm-sr">Acciones</span></th></tr></thead>
+            <tbody>
+              {filtered.map(c => (
+                <tr key={c.codigo}>
+                  <td>
+                    <div className="adm-cell-main">
+                      <AdmThumb src={comiteLogoUrl(c.codigo)} name={c.codigo} contain />
+                      <div>
+                        <div className="adm-cell-title adm-cell-code">
+                          <span className="adm-dot" style={{ background: c.color_hex || 'var(--fg-muted)' }} />{c.codigo}
+                        </div>
+                        {c.nombre_corto && <div className="adm-cell-sub">{c.nombre_corto}</div>}
+                      </div>
+                    </div>
+                  </td>
+                  <td><span className="adm-clip">{c.nombre_completo}</span></td>
+                  <td><span className="badge">{String(c.tipo || '—').replace(/_/g, ' ')}</span></td>
+                  <td><AdmBool value={c.activo} /></td>
+                  <td className="adm-actions">
+                    <AdmIconBtn icon="edit" title="Editar" onClick={() => setEditing({...c, _original:{ codigo:c.codigo }})} />
+                    <AdmIconBtn icon="trash" title="Desactivar" tone="danger" onClick={() => remove(c)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
        )}
 
       <AdminModal
         open={!!editing} onClose={()=>setEditing(null)} wide
         title={editing && editing._original ? 'Editar comité ' + editing._original.codigo : 'Nuevo comité'}
-        footer={<>
-          <button className="btn btn-ghost" onClick={()=>setEditing(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save}>Guardar</button>
-        </>}
+        footer={p2Pie(() => setEditing(null), save)}
       >
         {editing && (
-          <div className="grid col-2 gap-4">
+          <div className="adm-form-grid">
             <AdminField label="Código *" hint="Ej: SCOPH, CPC, DSNT (no se puede cambiar después)">
               <input className="input" value={editing.codigo||''} onChange={e=>setEditing({...editing, codigo:e.target.value})} disabled={!!editing._original} />
             </AdminField>
@@ -1012,7 +1215,12 @@ const AdminSectionComites = ({ toast }) => {
             <AdminField span label="Nombre completo *"><input className="input" value={editing.nombre_completo||''} onChange={e=>setEditing({...editing, nombre_completo:e.target.value})} /></AdminField>
             <AdminField label="Nombre corto"><input className="input" value={editing.nombre_corto||''} onChange={e=>setEditing({...editing, nombre_corto:e.target.value})} /></AdminField>
             <AdminField label="Ícono del sitio" hint="Nombres válidos: flask, heart, globe, health, exchange, book, edit, handshake, megaphone, award, layers, cpu"><input className="input" value={editing.icono||''} onChange={e=>setEditing({...editing, icono:e.target.value})} /></AdminField>
-            <AdminField label="Color (hex) *"><input className="input" value={editing.color_hex||''} onChange={e=>setEditing({...editing, color_hex:e.target.value})} placeholder="#7B1FA2" /></AdminField>
+            <AdminField label="Color (hex) *">
+              <div className="adm-color-row">
+                <span className="adm-color-swatch" style={{ background: editing.color_hex || 'transparent' }} aria-hidden="true" />
+                <input className="input" value={editing.color_hex||''} onChange={e=>setEditing({...editing, color_hex:e.target.value})} placeholder="#7B1FA2" />
+              </div>
+            </AdminField>
             <AdminField label="ID coordinador" hint="UUID del cargo en directorio"><input className="input" value={editing.coordinador_id||''} onChange={e=>setEditing({...editing, coordinador_id:e.target.value})} /></AdminField>
             <AdminField span label="Descripción"><textarea className="textarea" value={editing.descripcion||''} onChange={e=>setEditing({...editing, descripcion:e.target.value})} rows={3} /></AdminField>
             <AdminField span label="Objetivos / Líneas de acción" hint="Una por línea — se guardan como lista separada por |">
@@ -1025,9 +1233,9 @@ const AdminSectionComites = ({ toast }) => {
               />
             </AdminField>
             <AdminField label="Activo">
-              <label className="flex items-center gap-2" style={{ marginTop:8 }}>
+              <label className="adm-switch">
                 <input type="checkbox" checked={editing.activo !== false} onChange={e=>setEditing({...editing, activo:e.target.checked})} />
-                <span className="small">Visible en el sitio</span>
+                <span>Visible en el sitio</span>
               </label>
             </AdminField>
           </div>
@@ -1038,6 +1246,7 @@ const AdminSectionComites = ({ toast }) => {
 };
 
 // ───── Sección: Noticias / Actividades ─────
+// (Heredada: el panel usa hoy AdminNoticias de pages-4; se conserva por compatibilidad.)
 const AdminSectionNoticias = ({ toast, user }) => {
   const [items, setItems] = React.useState([]);
   const [editing, setEditing] = React.useState(null);
@@ -1061,58 +1270,55 @@ const AdminSectionNoticias = ({ toast, user }) => {
     try { await adminApi.post('noticias', n.publicado ? 'unpublish' : 'publish', { id:n.id }); toast.push(n.publicado?'Despublicado':'Publicado','ok'); reload(); }
     catch (e) { toast.push(e.message,'error'); }
   };
+  const nueva = () => setEditing({ categoria:'EVENTO', publicado:false });
   return (
     <>
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="serif" style={{ fontSize:22 }}>Actividades · Noticias</h3>
-        <div className="flex gap-2">
-          <button className="btn btn-ghost" onClick={reload}>Recargar</button>
-          <button className="btn btn-primary" onClick={() => setEditing({ categoria:'EVENTO', publicado:false })}><Icon name="plus" size={14} /> Nueva</button>
+      <AdmPageHead title="Actividades · Noticias" actions={p2Acciones(reload, nueva, 'Nueva')} />
+      {loading ? <AdmSkeleton /> :
+       items.length === 0 ? <AdmEmpty title="Sin noticias" /> : (
+        <div className="adm-table-wrap">
+          <table className="admin-table adm-table">
+            <thead><tr><th>Título</th><th>Categoría</th><th>Fecha</th><th>Publicado</th><th><span className="adm-sr">Acciones</span></th></tr></thead>
+            <tbody>
+              {items.map(n => (
+                <tr key={n.id}>
+                  <td>
+                    <div className="adm-cell-main">
+                      <AdmThumb src={IMG(n.imagen_portada)} name={n.titulo} />
+                      <div className="adm-cell-title adm-clip">{n.titulo}</div>
+                    </div>
+                  </td>
+                  <td><span className="badge">{n.categoria}</span></td>
+                  <td className="adm-mono">{n.fecha_publicacion ? new Date(n.fecha_publicacion).toLocaleDateString() : '—'}</td>
+                  <td><AdmBool value={n.publicado} /></td>
+                  <td className="adm-actions">
+                    <AdmIconBtn icon="eye" title={n.publicado ? 'Despublicar' : 'Publicar'} onClick={() => togglePublish(n)} />
+                    <AdmIconBtn icon="edit" title="Editar" onClick={() => setEditing(n)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
-      {loading ? <div className="card" style={{ padding:32, textAlign:'center' }}>Cargando…</div> :
-       items.length === 0 ? <div className="card" style={{ padding:32, textAlign:'center', color:'var(--fg-muted)' }}>Sin noticias.</div> : (
-        <table className="admin-table">
-          <thead><tr><th>Título</th><th>Categoría</th><th>Fecha</th><th>Publicado</th><th></th></tr></thead>
-          <tbody>
-            {items.map(n => (
-              <tr key={n.id}>
-                <td><strong>{n.titulo}</strong></td>
-                <td><span className="badge">{n.categoria}</span></td>
-                <td className="mono small">{n.fecha_publicacion ? new Date(n.fecha_publicacion).toLocaleDateString() : '—'}</td>
-                <td>{n.publicado === true ? '✓' : '✗'}</td>
-                <td>
-                  <div className="flex gap-2">
-                    <button className="icon-btn" title={n.publicado?'Despublicar':'Publicar'} onClick={()=>togglePublish(n)} style={{ width:28, height:28 }}><Icon name="eye" size={13} /></button>
-                    <button className="icon-btn" title="Editar" onClick={()=>setEditing(n)} style={{ width:28, height:28 }}><Icon name="edit" size={13} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
        )}
       <AdminModal open={!!editing} onClose={()=>setEditing(null)} wide
         title={editing && editing.id ? 'Editar noticia' : 'Nueva noticia'}
-        footer={<>
-          <button className="btn btn-ghost" onClick={()=>setEditing(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save}>Guardar</button>
-        </>}>
+        footer={p2Pie(() => setEditing(null), save)}>
         {editing && (
-          <>
-            <AdminField label="Título *"><input className="input" value={editing.titulo||''} onChange={e=>setEditing({...editing, titulo:e.target.value})} /></AdminField>
-            <AdminField label="Resumen *"><input className="input" value={editing.resumen||''} onChange={e=>setEditing({...editing, resumen:e.target.value})} /></AdminField>
+          <div className="adm-form-grid">
+            <AdminField span label="Título *"><input className="input" value={editing.titulo||''} onChange={e=>setEditing({...editing, titulo:e.target.value})} /></AdminField>
+            <AdminField span label="Resumen *"><input className="input" value={editing.resumen||''} onChange={e=>setEditing({...editing, resumen:e.target.value})} /></AdminField>
             <AdminField label="Categoría *">
               <select className="select" value={editing.categoria||'EVENTO'} onChange={e=>setEditing({...editing, categoria:e.target.value})}>
                 <option>EVENTO</option><option>ACADEMICO</option><option>INVESTIGACION</option><option>INSTITUCIONAL</option><option>INTERCAMBIO</option>
               </select>
             </AdminField>
-            <AdminField label="Imagen de portada">
+            <AdminField label="Tags (separados por coma)"><input className="input" value={editing.tags||''} onChange={e=>setEditing({...editing, tags:e.target.value})} /></AdminField>
+            <AdminField span label="Imagen de portada">
               <DriveImageInput value={editing.imagen_portada||''} onChange={v => setEditing({...editing, imagen_portada:v})} />
             </AdminField>
-            <AdminField label="Contenido (Markdown) *"><textarea className="textarea" value={editing.contenido_md||''} onChange={e=>setEditing({...editing, contenido_md:e.target.value})} rows={8} /></AdminField>
-            <AdminField label="Tags (separados por coma)"><input className="input" value={editing.tags||''} onChange={e=>setEditing({...editing, tags:e.target.value})} /></AdminField>
-          </>
+            <AdminField span label="Contenido (Markdown) *"><textarea className="textarea" value={editing.contenido_md||''} onChange={e=>setEditing({...editing, contenido_md:e.target.value})} rows={8} /></AdminField>
+          </div>
         )}
       </AdminModal>
     </>
@@ -1162,83 +1368,76 @@ const AdminSectionFormularios = ({ toast }) => {
     } catch (e) { toast.push(e.message, 'error'); setImportResult({ error: e.message }); }
     setImporting(false);
   };
+  const nuevo = () => setEditing({ tipo:'INSCRIPCION', destacado:false, activo:true, cta_label:'Inscríbete' });
 
   return (
     <>
-      <div className="flex justify-between items-center mb-6" style={{ flexWrap:'wrap', gap:12 }}>
-        <div>
-          <h3 className="serif" style={{ fontSize:22 }}>Formularios &amp; Convocatorias</h3>
-          <p className="small" style={{ color:'var(--fg-muted)', marginTop:4 }}>Cada uno aparece en la sección <strong>“Inscripciones”</strong> del landing público.</p>
-        </div>
-        <div className="flex gap-2">
-          <button className="btn btn-ghost" onClick={reload} style={{ padding:'10px 16px' }}>Recargar</button>
-          <button className="btn btn-primary" onClick={() => setEditing({ tipo:'INSCRIPCION', destacado:false, activo:true, cta_label:'Inscríbete' })} style={{ padding:'10px 16px' }}>
-            <Icon name="plus" size={14} /> Nuevo formulario
-          </button>
-        </div>
-      </div>
+      <AdmPageHead
+        sub={<>Cada uno aparece en la sección <strong>“Inscripciones”</strong> del landing público.</>}
+        actions={p2Acciones(reload, nuevo, 'Nuevo formulario')} />
 
-      {loading ? <div className="card" style={{ padding:32, textAlign:'center' }}>Cargando…</div> :
+      {loading ? <AdmSkeleton rows={4} /> :
        items.length === 0 ? (
-         <div className="card" style={{ padding:48, textAlign:'center', color:'var(--fg-muted)' }}>
-           <p style={{ marginBottom:16 }}>No hay formularios publicados aún.</p>
-           <button className="btn btn-primary" onClick={() => setEditing({ tipo:'INSCRIPCION', destacado:false, activo:true, cta_label:'Inscríbete' })}>Publicar el primero</button>
-         </div>
+         <AdmEmpty img="assets/mascota/mascota-formulario.png?v=3" title="No hay formularios publicados aún"
+           action={<button className="btn btn-primary" onClick={nuevo}><Icon name="plus" size={14} /> Publicar el primero</button>}>
+           Publica una convocatoria, curso o encuesta con su flyer y el enlace al formulario externo.
+         </AdmEmpty>
        ) : (
-        <table className="admin-table">
-          <thead><tr><th></th><th>Título</th><th>Tipo</th><th>Fecha límite</th><th>Activo</th><th></th></tr></thead>
-          <tbody>
-            {items.map(f => (
-              <tr key={f.id}>
-                <td>
-                  {f.imagen_url ? (
-                    <img src={IMG(f.imagen_url)} alt="" style={{ width:48, height:48, objectFit:'cover', borderRadius:8 }} onError={e => { e.currentTarget.style.display='none'; }} />
-                  ) : (
-                    <div style={{ width:48, height:48, borderRadius:8, background:'var(--bg-soft)' }} />
-                  )}
-                </td>
-                <td>
-                  <strong>{f.titulo}</strong>
-                  {f.destacado && <span className="badge badge-gold" style={{ marginLeft:8 }}>★</span>}
-                  <br/>
-                  <a href={f.url} target="_blank" rel="noopener noreferrer" className="small" style={{ color:'var(--violet-600)' }}>{String(f.url||'').slice(0,60)}</a>
-                </td>
-                <td><span className="badge">{f.tipo}</span></td>
-                <td className="mono small">{f.fecha_limite ? new Date(f.fecha_limite).toLocaleDateString() : '—'}</td>
-                <td>{f.activo === true ? '✓' : '✗'}</td>
-                <td>
-                  <div className="flex gap-2">
-                    <button className="icon-btn" title="Editar" onClick={()=>setEditing(f)} style={{ width:28, height:28 }}><Icon name="edit" size={13} /></button>
-                    <button className="icon-btn" title="Desactivar" onClick={()=>remove(f)} style={{ width:28, height:28 }}><Icon name="trash" size={13} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="adm-table-wrap">
+          <table className="admin-table adm-table">
+            <thead><tr><th>Formulario</th><th>Tipo</th><th>Fecha límite</th><th>Activo</th><th><span className="adm-sr">Acciones</span></th></tr></thead>
+            <tbody>
+              {items.map(f => (
+                <tr key={f.id}>
+                  <td>
+                    <div className="adm-cell-main">
+                      <AdmThumb src={IMG(f.imagen_url)} name={f.titulo} />
+                      <div className="adm-min0">
+                        <div className="adm-cell-title">
+                          {f.titulo}
+                          {f.destacado && <span className="badge badge-gold adm-ml"><Icon name="star" size={10} /> Destacado</span>}
+                        </div>
+                        <a href={f.url} target="_blank" rel="noopener noreferrer" className="adm-cell-sub adm-link adm-clip">{String(f.url||'').slice(0,60)}</a>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span className="badge">{f.tipo}</span></td>
+                  <td className="adm-mono">{f.fecha_limite ? new Date(f.fecha_limite).toLocaleDateString() : '—'}</td>
+                  <td><AdmBool value={f.activo} /></td>
+                  <td className="adm-actions">
+                    <AdmIconBtn icon="edit" title="Editar" onClick={() => setEditing(f)} />
+                    <AdmIconBtn icon="trash" title="Desactivar" tone="danger" onClick={() => remove(f)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
        )}
 
-      <div className="card mt-8" style={{ padding:'24px 28px', marginTop:32, background:'var(--bg-soft)' }}>
-        <h4 className="serif" style={{ fontSize:18, marginBottom:8 }}>Importación desde Google Form de inscripción</h4>
-        <p className="small" style={{ color:'var(--fg-soft)', marginBottom:16 }}>Lee la hoja <code>respuestas_form</code> e inserta nuevos miembros con estado <strong>PENDIENTE</strong>. Sólo para sincronizar con el form oficial de membresía.</p>
-        <button className="btn btn-ghost" onClick={importarFromGoogleForm} disabled={importing}>
-          {importing ? 'Importando…' : 'Importar respuestas a miembros'}
-        </button>
+      <div className="adm-panel adm-section">
+        <div className="adm-panel-head">
+          <div>
+            <div className="adm-overline">Sincronización</div>
+            <h3 className="mt-2">Importación desde Google Form de inscripción</h3>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={importarFromGoogleForm} disabled={importing}>
+            {importing ? <><span className="adm-spinner" /> Importando…</> : <><Icon name="download" size={14} /> Importar respuestas a miembros</>}
+          </button>
+        </div>
+        <p className="adm-page-sub">Lee la hoja <code>respuestas_form</code> e inserta nuevos miembros con estado <strong>PENDIENTE</strong>. Sólo para sincronizar con el form oficial de membresía.</p>
         {importResult && (
-          <pre style={{ marginTop:16, padding:14, fontSize:11, background:'var(--bg)', borderRadius:8, overflow:'auto', maxHeight:240, border:'1px solid var(--border)' }}>{JSON.stringify(importResult, null, 2)}</pre>
+          <pre className="adm-pre">{JSON.stringify(importResult, null, 2)}</pre>
         )}
       </div>
 
       <AdminModal
         open={!!editing} onClose={()=>setEditing(null)} wide
         title={editing && editing.id ? 'Editar formulario' : 'Nuevo formulario / convocatoria'}
-        footer={<>
-          <button className="btn btn-ghost" onClick={()=>setEditing(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save}>Guardar</button>
-        </>}
+        footer={p2Pie(() => setEditing(null), save)}
       >
         {editing && (
-          <div className="grid col-2 gap-4">
+          <div className="adm-form-grid">
             <AdminField span label="Título *" hint="Ej: Curso Taller Pulso de Vida — Dominando Venas y Arterias">
               <input className="input" value={editing.titulo||''} onChange={e=>setEditing({...editing, titulo:e.target.value})} />
             </AdminField>
@@ -1269,18 +1468,18 @@ const AdminSectionFormularios = ({ toast }) => {
               <input className="input" value={editing.cta_label||'Inscríbete'} onChange={e=>setEditing({...editing, cta_label:e.target.value})} placeholder="Inscríbete" />
             </AdminField>
             <AdminField label="Destacado">
-              <label className="flex items-center gap-2" style={{ marginTop:8 }}>
+              <label className="adm-switch">
                 <input type="checkbox" checked={!!editing.destacado} onChange={e=>setEditing({...editing, destacado:e.target.checked})} />
-                <span className="small">Aparece primero en el landing</span>
+                <span>Aparece primero en el landing</span>
               </label>
             </AdminField>
             <AdminField span label="Descripción">
               <textarea className="textarea" value={editing.descripcion||''} onChange={e=>setEditing({...editing, descripcion:e.target.value})} rows={4} placeholder="Para qué es el formulario, ponente, fecha, modalidad, requisitos..." />
             </AdminField>
             <AdminField label="Activo">
-              <label className="flex items-center gap-2" style={{ marginTop:8 }}>
+              <label className="adm-switch">
                 <input type="checkbox" checked={editing.activo !== false} onChange={e=>setEditing({...editing, activo:e.target.checked})} />
-                <span className="small">Visible en el sitio</span>
+                <span>Visible en el sitio</span>
               </label>
             </AdminField>
           </div>
@@ -1380,55 +1579,49 @@ const AdminSectionSorteos = ({ toast }) => {
 
   return (
     <>
-      <div className="flex justify-between items-center mb-6" style={{ flexWrap:'wrap', gap:12 }}>
-        <div>
-          <h3 className="serif" style={{ fontSize:22 }}>Sorteos</h3>
-          <p className="small" style={{ color:'var(--fg-muted)', marginTop:4 }}>Crea sorteos, agrega participantes (manual o desde miembros) y realiza el sorteo aleatorio.</p>
-        </div>
-        <div className="flex gap-2">
-          <button className="btn btn-ghost" onClick={reload} style={{ padding:'10px 16px' }}>Recargar</button>
-          <button className="btn btn-primary" onClick={() => openEdit(null)} style={{ padding:'10px 16px' }}>
-            <Icon name="plus" size={14} /> Nuevo sorteo
-          </button>
-        </div>
-      </div>
+      <AdmPageHead
+        sub="Crea sorteos, agrega participantes (manual o desde miembros) y realiza el sorteo aleatorio."
+        actions={p2Acciones(reload, () => openEdit(null), 'Nuevo sorteo')} />
 
-      {loading ? <div className="card" style={{ padding:32, textAlign:'center' }}>Cargando…</div> :
+      {loading ? <AdmSkeleton rows={4} /> :
        items.length === 0 ? (
-         <div className="card" style={{ padding:48, textAlign:'center', color:'var(--fg-muted)' }}>
-           <p style={{ marginBottom:16 }}>No hay sorteos creados aún.</p>
-           <button className="btn btn-primary" onClick={() => openEdit(null)}>Crear el primero</button>
-         </div>
+         <AdmEmpty title="No hay sorteos creados aún"
+           action={<button className="btn btn-primary" onClick={() => openEdit(null)}><Icon name="plus" size={14} /> Crear el primero</button>}>
+           Arma la lista de participantes y deja que el azar elija a los ganadores.
+         </AdmEmpty>
        ) : (
-        <table className="admin-table">
-          <thead><tr><th>Título</th><th>Estado</th><th>Participantes</th><th>Ganadores</th><th>Realizado</th><th></th></tr></thead>
-          <tbody>
-            {items.map(s => (
-              <tr key={s.id}>
-                <td><strong>{s.titulo}</strong></td>
-                <td><EstadoBadge value={s.estado === 'ABIERTO' ? 'PENDIENTE' : s.estado === 'REALIZADO' ? 'ACTIVO' : 'INACTIVO'} /></td>
-                <td>{s.total_participantes || 0}</td>
-                <td>
-                  {Array.isArray(s.ganadores) && s.ganadores.length > 0
-                    ? <span className="small">{s.ganadores.slice(0,3).join(', ')}{s.ganadores.length > 3 ? ` +${s.ganadores.length-3}` : ''}</span>
-                    : <span className="small" style={{ color:'var(--fg-muted)' }}>—</span>}
-                </td>
-                <td className="mono small">{s.fecha_realizado ? new Date(s.fecha_realizado).toLocaleString().slice(0,16) : '—'}</td>
-                <td>
-                  <div className="flex gap-2">
+        <div className="adm-table-wrap">
+          <table className="admin-table adm-table">
+            <thead><tr><th>Sorteo</th><th>Estado</th><th className="adm-num">Participantes</th><th>Ganadores</th><th>Realizado</th><th><span className="adm-sr">Acciones</span></th></tr></thead>
+            <tbody>
+              {items.map(s => (
+                <tr key={s.id}>
+                  <td>
+                    <div className="adm-cell-main">
+                      <AdmThumb src={IMG(s.imagen_url)} name={s.titulo} />
+                      <div className="adm-cell-title">{s.titulo}</div>
+                    </div>
+                  </td>
+                  <td><EstadoBadge value={s.estado} /></td>
+                  <td className="adm-num">{s.total_participantes || 0}</td>
+                  <td>
+                    {Array.isArray(s.ganadores) && s.ganadores.length > 0
+                      ? <span className="adm-gold-txt"><Icon name="star" size={12} /> {s.ganadores.slice(0,3).join(', ')}{s.ganadores.length > 3 ? ` +${s.ganadores.length-3}` : ''}</span>
+                      : <span className="adm-muted">—</span>}
+                  </td>
+                  <td className="adm-mono">{s.fecha_realizado ? new Date(s.fecha_realizado).toLocaleString().slice(0,16) : '—'}</td>
+                  <td className="adm-actions">
                     {s.estado !== 'REALIZADO' && (
-                      <button className="icon-btn" title="Realizar sorteo" disabled={running===s.id} onClick={()=>realizar(s)} style={{ width:28, height:28, color:'var(--violet-700)' }}>
-                        <Icon name="sparkle" size={13} />
-                      </button>
+                      <AdmIconBtn icon="sparkle" title="Realizar sorteo" tone="accent" disabled={running===s.id} onClick={() => realizar(s)} />
                     )}
-                    <button className="icon-btn" title="Editar" onClick={()=>openEdit(s)} style={{ width:28, height:28 }}><Icon name="edit" size={13} /></button>
-                    <button className="icon-btn" title="Desactivar" onClick={()=>remove(s)} style={{ width:28, height:28 }}><Icon name="trash" size={13} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    <AdmIconBtn icon="edit" title="Editar" onClick={() => openEdit(s)} />
+                    <AdmIconBtn icon="trash" title="Desactivar" tone="danger" onClick={() => remove(s)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
        )}
 
       {/* Modal crear/editar sorteo */}
@@ -1438,13 +1631,13 @@ const AdminSectionSorteos = ({ toast }) => {
         footer={<>
           <button className="btn btn-ghost" onClick={()=>setEditing(null)}>Cancelar</button>
           {editing && editing.id && (
-            <button className="btn btn-ghost" onClick={importarMiembros}>Importar miembros activos</button>
+            <button className="btn btn-ghost" onClick={importarMiembros}><Icon name="users" size={14} /> Importar miembros activos</button>
           )}
           <button className="btn btn-primary" onClick={save}>Guardar</button>
         </>}
       >
         {editing && (
-          <div className="grid col-2 gap-4">
+          <div className="adm-form-grid">
             <AdminField span label="Título *"><input className="input" value={editing.titulo||''} onChange={e=>setEditing({...editing, titulo:e.target.value})} /></AdminField>
             <AdminField span label="Imagen / Flyer">
               <DriveImageInput value={editing.imagen_url||''} onChange={v => setEditing({...editing, imagen_url:v})} />
@@ -1470,16 +1663,16 @@ const AdminSectionSorteos = ({ toast }) => {
               </select>
             </AdminField>
             <AdminField label="Activo">
-              <label className="flex items-center gap-2" style={{ marginTop:8 }}>
+              <label className="adm-switch">
                 <input type="checkbox" checked={editing.activo !== false} onChange={e=>setEditing({...editing, activo:e.target.checked})} />
-                <span className="small">Visible en el sitio</span>
+                <span>Visible en el sitio</span>
               </label>
             </AdminField>
             <AdminField span label="Descripción">
               <textarea className="textarea" value={editing.descripcion||''} onChange={e=>setEditing({...editing, descripcion:e.target.value})} rows={3} />
             </AdminField>
             <AdminField span label={`Participantes (un nombre por línea — total: ${(editing._participantes_text||'').split('\n').filter(s=>s.trim()).length})`} hint="Botón “Importar miembros activos” en el footer puebla esta lista desde la hoja miembros.">
-              <textarea className="textarea" rows={10} value={editing._participantes_text||''} onChange={e=>setEditing({...editing, _participantes_text:e.target.value})} placeholder={"Yessica Ruth Puma\nMarvin Fernando Cruz Maron\n..."} style={{ fontFamily:'var(--font-mono)', fontSize:12 }} />
+              <textarea className="textarea adm-mono-area" rows={10} value={editing._participantes_text||''} onChange={e=>setEditing({...editing, _participantes_text:e.target.value})} placeholder={"Yessica Ruth Puma\nMarvin Fernando Cruz Maron\n..."} />
             </AdminField>
           </div>
         )}
@@ -1488,17 +1681,20 @@ const AdminSectionSorteos = ({ toast }) => {
       {/* Modal de resultado de sorteo */}
       <AdminModal
         open={!!winners} onClose={()=>setWinners(null)}
-        title={'🎉 Sorteo realizado'}
+        title="Sorteo realizado"
         footer={<button className="btn btn-primary" onClick={()=>setWinners(null)}>Listo</button>}
       >
         {winners && (
-          <div style={{ textAlign:'center', padding:'12px 0' }}>
-            <p style={{ marginBottom:16, color:'var(--fg-soft)' }}>De {winners.total} participantes en <strong>{winners.titulo}</strong>:</p>
-            <div className="grid gap-3" style={{ marginTop:24 }}>
+          <div className="adm-winners">
+            <p>De <strong>{winners.total}</strong> participantes en <strong>{winners.titulo}</strong>:</p>
+            <div className="adm-winners-list">
               {(winners.ganadores || []).map((g, i) => (
-                <div key={i} className="card" style={{ padding:'18px 20px', background:'linear-gradient(135deg, var(--violet-50) 0%, var(--bg) 100%)', border:'2px solid var(--violet-300)' }}>
-                  <div className="mono small" style={{ color:'var(--violet-700)' }}>GANADOR {i + 1}</div>
-                  <div className="serif" style={{ fontSize:24, marginTop:6 }}>{g}</div>
+                <div key={i} className="adm-winner" style={{ animationDelay: (i * 120) + 'ms' }}>
+                  <span className="adm-winner-n">{i + 1}</span>
+                  <div>
+                    <div className="adm-overline adm-gold-txt">Ganador {i + 1}</div>
+                    <div className="adm-winner-name">{g}</div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1514,6 +1710,7 @@ const AdminSectionConfig = ({ toast }) => {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [editing, setEditing] = React.useState(null);
+  const [q, setQ] = React.useState('');
   const reload = async () => {
     setLoading(true);
     try { const r = await adminApi.get('admin','configList'); setItems(Array.isArray(r.data) ? r.data : []); }
@@ -1527,41 +1724,43 @@ const AdminSectionConfig = ({ toast }) => {
       toast.push('Configuración guardada','ok'); setEditing(null); reload();
     } catch (e) { toast.push(e.message,'error'); }
   };
+  const texto = q.trim().toLowerCase();
+  const visibles = texto ? items.filter(c => (String(c.clave) + ' ' + String(c.valor || '')).toLowerCase().includes(texto)) : items;
   return (
     <>
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h3 className="serif" style={{ fontSize:22 }}>Variables del sitio</h3>
-          <p className="small" style={{ color:'var(--fg-muted)' }}>Edita correos, URLs y otras claves de la hoja <code>config</code>.</p>
+      <AdmPageHead
+        sub={<>Edita correos, URLs y otras claves de la hoja <code>config</code>.</>}
+        actions={p2Acciones(reload, () => setEditing({ clave:'', valor:'' }), 'Nueva clave')} />
+      {!loading && items.length > 0 && (
+        <div className="adm-toolbar">
+          <AdmSearch value={q} onChange={setQ} placeholder="Buscar clave o valor" />
+          <span className="adm-toolbar-spacer" />
+          <span className="adm-count">{visibles.length} claves</span>
         </div>
-        <div className="flex gap-2">
-          <button className="btn btn-ghost" onClick={reload}>Recargar</button>
-          <button className="btn btn-primary" onClick={() => setEditing({ clave:'', valor:'' })}><Icon name="plus" size={14} /> Nueva clave</button>
+      )}
+      {loading ? <AdmSkeleton /> :
+       items.length === 0 ? <AdmEmpty img={false} title="Sin configuración" /> : (
+        <div className="adm-table-wrap">
+          <table className="admin-table adm-table">
+            <thead><tr><th>Clave</th><th>Valor</th><th><span className="adm-sr">Acciones</span></th></tr></thead>
+            <tbody>
+              {visibles.length === 0 && <tr><td colSpan={3} className="adm-td-empty">Ninguna clave coincide.</td></tr>}
+              {visibles.map(c => (
+                <tr key={c.clave}>
+                  <td><span className="adm-mono adm-key">{c.clave}</span></td>
+                  <td className="adm-val">{String(c.valor||'').slice(0,140)}</td>
+                  <td className="adm-actions"><AdmIconBtn icon="edit" title="Editar" onClick={() => setEditing({...c})} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
-      {loading ? <div className="card" style={{ padding:32, textAlign:'center' }}>Cargando…</div> :
-       items.length === 0 ? <div className="card" style={{ padding:32, textAlign:'center' }}>Sin configuración.</div> : (
-        <table className="admin-table">
-          <thead><tr><th>Clave</th><th>Valor</th><th></th></tr></thead>
-          <tbody>
-            {items.map(c => (
-              <tr key={c.clave}>
-                <td><strong className="mono">{c.clave}</strong></td>
-                <td className="small" style={{ wordBreak:'break-all' }}>{String(c.valor||'').slice(0,140)}</td>
-                <td><button className="icon-btn" onClick={()=>setEditing({...c})} style={{ width:28, height:28 }}><Icon name="edit" size={13} /></button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
        )}
       <AdminModal open={!!editing} onClose={()=>setEditing(null)}
         title="Configuración"
-        footer={<>
-          <button className="btn btn-ghost" onClick={()=>setEditing(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save}>Guardar</button>
-        </>}>
+        footer={p2Pie(() => setEditing(null), save)}>
         {editing && (<>
-          <AdminField label="Clave *"><input className="input" value={editing.clave||''} onChange={e=>setEditing({...editing, clave:e.target.value})} /></AdminField>
+          <AdminField label="Clave *"><input className="input adm-mono" value={editing.clave||''} onChange={e=>setEditing({...editing, clave:e.target.value})} /></AdminField>
           <AdminField label="Valor *"><textarea className="textarea" value={editing.valor||''} onChange={e=>setEditing({...editing, valor:e.target.value})} rows={4} /></AdminField>
         </>)}
       </AdminModal>
@@ -1602,40 +1801,45 @@ const AdminSectionUsuarios = ({ toast }) => {
   };
   return (
     <>
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="serif" style={{ fontSize:22 }}>Usuarios admin</h3>
-        <button className="btn btn-primary" onClick={() => setEditing({ rol:'EDITOR', activo:true })}><Icon name="plus" size={14} /> Nuevo usuario</button>
-      </div>
-      {loading ? <div className="card" style={{ padding:32, textAlign:'center' }}>Cargando…</div> :
-        <table className="admin-table">
-          <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Activo</th><th>Último login</th><th></th></tr></thead>
-          <tbody>
-            {items.map(u => (
-              <tr key={u.id}>
-                <td><strong className="mono">{u.username}</strong></td>
-                <td>{u.nombre}</td>
-                <td><span className="badge">{u.rol}</span></td>
-                <td>{u.activo === true ? '✓' : '✗'}</td>
-                <td className="mono small">{u.ultimo_login ? new Date(u.ultimo_login).toLocaleString().slice(0,16) : '—'}</td>
-                <td>
-                  <div className="flex gap-2">
-                    <button className="icon-btn" title="Editar" onClick={()=>setEditing(u)} style={{ width:28, height:28 }}><Icon name="edit" size={13} /></button>
-                    <button className="icon-btn" title="Reset password" onClick={()=>reset(u)} style={{ width:28, height:28 }}><Icon name="lock" size={13} /></button>
-                    <button className="icon-btn" title="Desactivar" onClick={()=>remove(u)} style={{ width:28, height:28 }}><Icon name="trash" size={13} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>}
+      <AdmPageHead
+        sub="Cuentas con acceso a este panel. Solo el superadministrador puede crear usuarios o restablecer contraseñas."
+        actions={p2Acciones(reload, () => setEditing({ rol:'EDITOR', activo:true }), 'Nuevo usuario')} />
+      {loading ? <AdmSkeleton rows={3} /> :
+       items.length === 0 ? <AdmEmpty img={false} title="Sin usuarios" /> : (
+        <div className="adm-table-wrap">
+          <table className="admin-table adm-table">
+            <thead><tr><th>Usuario</th><th>Rol</th><th>Activo</th><th>Último login</th><th><span className="adm-sr">Acciones</span></th></tr></thead>
+            <tbody>
+              {items.map(u => (
+                <tr key={u.id}>
+                  <td>
+                    <div className="adm-cell-main">
+                      <AdmThumb name={u.nombre || u.username} round />
+                      <div>
+                        <div className="adm-cell-title">{u.nombre || u.username}</div>
+                        <div className="adm-cell-sub adm-mono">{u.username}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span className={'badge ' + (u.rol === 'SUPER_ADMIN' ? 'badge-gold' : 'badge-violet')}>{String(u.rol || '—').replace(/_/g, ' ')}</span></td>
+                  <td><AdmBool value={u.activo} /></td>
+                  <td className="adm-mono">{u.ultimo_login ? new Date(u.ultimo_login).toLocaleString().slice(0,16) : '—'}</td>
+                  <td className="adm-actions">
+                    <AdmIconBtn icon="edit" title="Editar" onClick={() => setEditing(u)} />
+                    <AdmIconBtn icon="lock" title="Reset password" onClick={() => reset(u)} />
+                    <AdmIconBtn icon="trash" title="Desactivar" tone="danger" onClick={() => remove(u)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+       )}
       <AdminModal open={!!editing} onClose={()=>setEditing(null)}
         title={editing && editing.id ? 'Editar usuario' : 'Nuevo usuario'}
-        footer={<>
-          <button className="btn btn-ghost" onClick={()=>setEditing(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save}>Guardar</button>
-        </>}>
+        footer={p2Pie(() => setEditing(null), save)}>
         {editing && (
-          <>
+          <div className="adm-form-grid">
             <AdminField label="Username *"><input className="input" value={editing.username||''} onChange={e=>setEditing({...editing, username:e.target.value})} disabled={!!editing.id} /></AdminField>
             <AdminField label="Nombre *"><input className="input" value={editing.nombre||''} onChange={e=>setEditing({...editing, nombre:e.target.value})} /></AdminField>
             <AdminField label="Rol *">
@@ -1649,9 +1853,9 @@ const AdminSectionUsuarios = ({ toast }) => {
               </AdminField>
             )}
             <AdminField label="Activo">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={editing.activo !== false} onChange={e=>setEditing({...editing, activo:e.target.checked})} /><span className="small">Habilitado</span></label>
+              <label className="adm-switch"><input type="checkbox" checked={editing.activo !== false} onChange={e=>setEditing({...editing, activo:e.target.checked})} /><span>Habilitado</span></label>
             </AdminField>
-          </>
+          </div>
         )}
       </AdminModal>
     </>
@@ -1678,55 +1882,128 @@ const ADMIN_SECTIONS = {
 };
 window.ADMIN_SECTIONS = ADMIN_SECTIONS;
 
+// Shell del panel: sidebar 248px (off-canvas en móvil con overlay), topbar
+// sticky con migas, salto rápido a secciones y "Ver sitio".
 const AdminDashboard = ({ onLogout, user }) => {
   const [active, setActive] = React.useState('dashboard');
+  const [navOpen, setNavOpen] = React.useState(false);
+  const [jump, setJump] = React.useState('');
   const toast = useToast();
   const Current = ADMIN_SECTIONS[active] || ADMIN_SECTIONS.dashboard;
   // Las secciones de pages-4 se declaran por nombre y se resuelven aquí.
   const CurrentComp = Current.Component || window[Current.component];
   const userInitials = ((user && (user.nombre || user.username)) || 'AD')
     .split(' ').map(s => s[0]).filter(Boolean).slice(0,2).join('').toUpperCase();
+  const userName = (user && (user.nombre || user.username)) || 'Administrador';
+  const grupo = (ADMIN_NAV.find(g => g.items.some(i => i.id === active)) || {}).section || 'Panel';
+
+  const ir = (id) => {
+    setActive(id); setNavOpen(false); setJump('');
+    try { window.scrollTo({ top: 0 }); } catch (e) {}
+  };
+  // Esc cierra el menú lateral en móvil.
+  React.useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape') setNavOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navOpen]);
+
+  const todas = ADMIN_NAV.reduce((acc, g) => acc.concat(g.items.map(i => ({ ...i, section: g.section }))), []);
+  const qj = jump.trim().toLowerCase();
+  const matches = qj ? todas.filter(i => (i.label + ' ' + i.section).toLowerCase().includes(qj)).slice(0, 6) : [];
+
+  const hora = new Date().getHours();
+  const saludo = hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
+  const hoy = new Date().toLocaleDateString('es-PE', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
     <div className="admin-shell">
-      <aside className="admin-sidebar">
-        <div className="brand"><Logo size={32} /><Wordmark inverse /></div>
+      <aside className={'admin-sidebar' + (navOpen ? ' open' : '')} aria-label="Navegación del panel">
+        <div className="brand">
+          <Logo size={34} />
+          <div className="adm-brand-txt"><strong>SOCIEM-UNA</strong><span>Panel interno</span></div>
+          <button type="button" className="adm-icon-btn adm-burger adm-sidebar-close" onClick={() => setNavOpen(false)} aria-label="Cerrar menú">
+            <Icon name="close" size={16} />
+          </button>
+        </div>
         <nav className="admin-nav">
           {ADMIN_NAV.map(group => (
             <div key={group.section}>
               <div className="admin-nav-section">{group.section}</div>
               {group.items.map(it => (
-                <a key={it.id} href="#" className={active === it.id ? 'active' : ''} onClick={(e) => { e.preventDefault(); setActive(it.id); }}>
-                  <Icon name={it.icon} size={16} />
-                  <span style={{ flex: 1 }}>{it.label}</span>
+                <a key={it.id} href="#" className={active === it.id ? 'active' : ''} aria-current={active === it.id ? 'page' : undefined}
+                  onClick={(e) => { e.preventDefault(); ir(it.id); }}>
+                  <span className="adm-nav-ico"><Icon name={it.icon} size={18} /></span>
+                  <span className="adm-nav-label">{it.label}</span>
                 </a>
               ))}
             </div>
           ))}
         </nav>
-        <div style={{ position: 'absolute', bottom: 24, left: 16, right: 16 }}>
-          <a href="#" onClick={(e) => { e.preventDefault(); onLogout(); }} style={{ display: 'flex', gap: 12, padding: '10px 12px', borderRadius: 8, color: '#807A8C', fontSize: 13, alignItems: 'center' }}>
-            <Icon name="logout" size={14} /> Cerrar sesión
-          </a>
+        <div className="adm-user">
+          <span className="adm-avatar">{userInitials}</span>
+          <span className="adm-user-txt">
+            <strong>{userName}</strong>
+            <span>{user && user.rol ? String(user.rol).replace(/_/g, ' ').toLowerCase() : 'Sesión activa'}</span>
+          </span>
+          <button type="button" className="adm-icon-btn danger" onClick={onLogout} title="Cerrar sesión" aria-label="Cerrar sesión">
+            <Icon name="logout" size={16} />
+          </button>
         </div>
       </aside>
+      <div className={'adm-overlay' + (navOpen ? ' open' : '')} onClick={() => setNavOpen(false)} aria-hidden="true" />
 
       <main className="admin-main">
-        <div className="admin-topbar">
-          <div>
-            <div className="mono small" style={{ color: 'var(--fg-muted)' }}>SOCIEM-UNA · ADMIN</div>
-            <div className="serif" style={{ fontSize: 22, marginTop: 2 }}>{Current.title}</div>
+        <header className="admin-topbar">
+          <div className="adm-topbar-left">
+            <button type="button" className="icon-btn adm-burger" onClick={() => setNavOpen(true)} aria-label="Abrir menú" aria-expanded={navOpen}>
+              <Icon name="menu" size={18} />
+            </button>
+            <div className="adm-topbar-title">
+              <div className="adm-crumb">{grupo}</div>
+              <h1>{Current.title}</h1>
+            </div>
           </div>
-          <div className="flex gap-3 items-center">
-            <span className="small" style={{ color: 'var(--fg-muted)' }}>{user ? (user.username + ' · ' + (user.rol || '')) : ''}</span>
-            <div style={{ width: 36, height: 36, borderRadius: 99, background: 'var(--violet-600)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 13 }}>{userInitials}</div>
+          <div className="adm-topbar-right">
+            <div className="adm-jump adm-hide-md">
+              <AdmSearch value={jump} onChange={setJump} placeholder="Ir a una sección…"
+                onKeyDown={(e) => { if (e.key === 'Enter' && matches[0]) ir(matches[0].id); if (e.key === 'Escape') setJump(''); }} />
+              {qj && (
+                <div className="adm-jump-list" role="listbox">
+                  {matches.length === 0
+                    ? <div className="adm-jump-none">Sin coincidencias</div>
+                    : matches.map(m => (
+                      <button key={m.id} type="button" role="option" className="adm-jump-item"
+                        onMouseDown={(e) => e.preventDefault()} onClick={() => ir(m.id)}>
+                        <Icon name={m.icon} size={15} /><span>{m.label}</span><em>{m.section}</em>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+            <a className="btn btn-ghost btn-sm adm-hide-sm" href="#/home" target="_blank" rel="noopener noreferrer">
+              Ver sitio <Icon name="arrowUpRight" size={14} />
+            </a>
+            <span className="adm-avatar adm-hide-sm" title={userName}>{userInitials}</span>
           </div>
-        </div>
+        </header>
 
         <div className="admin-content">
-          {CurrentComp
-            ? <CurrentComp toast={toast} user={user} go={setActive} />
-            : <div className="card" style={{ padding: 32, color: 'var(--fg-muted)' }}>Esta sección no está disponible: no cargó <code>components/pages-4.jsx</code>. Recarga la página.</div>}
+          <div key={active} className="page-fade">
+            {active === 'dashboard' && (
+              <div className="adm-hello">
+                <div className="adm-overline">{hoy}</div>
+                <h2>{saludo}, <em>{String(userName).split(' ')[0]}</em>.</h2>
+                <p>Este es el pulso de SOCIEM-UNA: indicadores del día y accesos a lo que más se usa.</p>
+              </div>
+            )}
+            {CurrentComp
+              ? <CurrentComp toast={toast} user={user} go={ir} />
+              : <AdmEmpty img="assets/mascota/mascota-error.png?v=3" title="Sección no disponible">
+                  No cargó <code>components/pages-4.jsx</code>. Recarga la página.
+                </AdmEmpty>}
+          </div>
         </div>
       </main>
 

@@ -2,10 +2,13 @@
 const { useState, useEffect } = React;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "heroVariant": "editorial",
   "cardStyle": "shadow",
-  "theme": "light"
+  "theme": "dark"
 }/*EDITMODE-END*/;
+
+// Noche Altiplánica es oscuro por defecto (DESIGN.md); el claro es opcional y
+// se recuerda por visitante.
+const temaGuardado = () => { try { return localStorage.getItem('sociem_theme'); } catch (e) { return null; } };
 
 const PAGES = ['home', 'nosotros', 'directorio', 'comites', 'miembros', 'eventos', 'noticias', 'tienda', 'registro', 'actividades', 'certificados', 'contacto', 'admin'];
 // Parsea el hash en { page, sub }: "#/noticias/mi-slug" → page noticias, sub
@@ -29,7 +32,7 @@ const App = () => {
     setRuta({ page: p, sub: '' });
     try { if (window.location.hash !== '#/' + p) window.location.hash = '/' + p; } catch (e) {}
   };
-  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [tweaks, setTweak] = useTweaks({ ...TWEAK_DEFAULTS, theme: temaGuardado() || TWEAK_DEFAULTS.theme });
 
   useEffect(() => {
     const onHash = () => setRuta(parseHash());
@@ -48,6 +51,8 @@ const App = () => {
     document.body.dataset.cards = tweaks.cardStyle;
   }, [tweaks.theme, tweaks.cardStyle]);
 
+  useEffect(() => { try { localStorage.setItem('sociem_theme', tweaks.theme); } catch (e) {} }, [tweaks.theme]);
+
   const toggleTheme = () => setTweak('theme', tweaks.theme === 'dark' ? 'light' : 'dark');
 
   // Scroll to top on page change
@@ -59,7 +64,7 @@ const App = () => {
     <>
       {!isAdmin && <Navbar page={page} setPage={setPage} theme={tweaks.theme} toggleTheme={toggleTheme} />}
       <main key={page}>
-        {page === 'home' && <HomePage heroVariant={tweaks.heroVariant} />}
+        {page === 'home' && <HomePage />}
         {page === 'nosotros' && <NosotrosPage />}
         {page === 'directorio' && <DirectorioPage />}
         {page === 'comites' && <ComitesPage />}
@@ -76,6 +81,8 @@ const App = () => {
         {page === 'admin' && <AdminPage />}
       </main>
       {!isAdmin && <Footer setPage={setPage} />}
+      {/* "Now playing" del sitio: próximo evento en las páginas públicas. */}
+      {!isAdmin && <NextEventBar page={page} />}
 
       <TweaksPanel title="Tweaks · SOCIEM-UNA">
         <TweakSection title="Página activa">
@@ -97,18 +104,6 @@ const App = () => {
               { value: 'certificados', label: 'Certificados' },
               { value: 'contacto', label: 'Contacto' },
               { value: 'admin', label: 'Admin (login)' },
-            ]}
-          />
-        </TweakSection>
-
-        <TweakSection title="Hero del Home" subtitle="3 variaciones">
-          <TweakRadio
-            value={tweaks.heroVariant}
-            onChange={(v) => { setTweak('heroVariant', v); setPage('home'); }}
-            options={[
-              { value: 'editorial', label: 'Editorial' },
-              { value: 'modern', label: 'Moderno' },
-              { value: 'vibrant', label: 'Vibrante' },
             ]}
           />
         </TweakSection>

@@ -145,14 +145,23 @@ const ComiteLogo = ({ code, size = 40 }) => {
   );
 };
 
+// Versión liviana (≈100 KB) de los logos de comité para tiras y rejillas. Los
+// PNG de assets/logos miden 3375 px y quedan solo para el certificado impreso.
+const comiteLogoSm = (code) => COMITE_LOGO[code] ? `assets/logos/sm/${COMITE_LOGO[code]}` : null;
+
+// Wordmark: los colores viven en css/home.css (.wordmark) para que respondan
+// al tema; `inverse` lo fuerza a blanco sobre superficies siempre oscuras.
 const Wordmark = ({ inverse = false }) => (
-  <div style={{ lineHeight: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-    <span style={{ fontFamily: 'var(--font-serif)', fontSize: 19, fontWeight: 600, letterSpacing: '-0.02em', color: inverse ? '#fff' : 'inherit' }}>SOCIEM</span>
-    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.18em', color: inverse ? 'rgba(255,255,255,.6)' : 'var(--fg-muted)' }}>UNA · PUNO</span>
+  <div className={`wordmark ${inverse ? 'is-inverse' : ''}`}>
+    <span className="wordmark-name">SOCIEM</span>
+    <span className="wordmark-sub">UNA · PUNO</span>
   </div>
 );
 
 // ============ Navbar ============
+// Lista plana: la usan el menú móvil y cualquier página que necesite el mapa
+// del sitio. La barra de escritorio usa NAV_GROUPS para no amontonar diez
+// enlaces a 1280px.
 const NAV_ITEMS = [
   { id: 'home', label: 'Inicio' },
   { id: 'nosotros', label: 'Nosotros' },
@@ -166,122 +175,359 @@ const NAV_ITEMS = [
   { id: 'contacto', label: 'Contacto' },
 ];
 
+const NAV_GROUPS = [
+  { id: 'home', label: 'Inicio' },
+  { id: 'sociedad', label: 'Sociedad', children: [
+    { id: 'nosotros', label: 'Nosotros', desc: 'Historia, misión y filiación', icon: 'compass' },
+    { id: 'directorio', label: 'Directorio', desc: 'Junta directiva de la gestión', icon: 'award' },
+    { id: 'comites', label: 'Comités', desc: 'IFMSA, SOCIMEP y divisiones', icon: 'layers' },
+    { id: 'miembros', label: 'Miembros', desc: 'Quienes hacen SOCIEM', icon: 'users' },
+  ] },
+  { id: 'eventos', label: 'Eventos' },
+  { id: 'noticias', label: 'Noticias' },
+  { id: 'certificados', label: 'Certificados' },
+  { id: 'tienda', label: 'Tienda' },
+  { id: 'contacto', label: 'Contacto' },
+];
+
+const SHELL_REDES = [
+  { href: 'https://www.facebook.com/share/1Ag5jhmu7K/', icon: 'facebook', label: 'Facebook de SOCIEM-UNA', externo: true },
+  { href: 'https://www.instagram.com/sociem_una_puno', icon: 'instagram', label: 'Instagram de SOCIEM-UNA', externo: true },
+  { href: 'mailto:sociem.una@gmail.com', icon: 'mail', label: 'Escribir a SOCIEM-UNA por correo' },
+];
+
+const RedesLinks = ({ className = '' }) => (
+  <div className={`redes ${className}`}>
+    {SHELL_REDES.map(r => (
+      <a key={r.icon} href={r.href} aria-label={r.label} className="icon-btn"
+         {...(r.externo ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
+        <Icon name={r.icon} size={16} />
+      </a>
+    ))}
+  </div>
+);
+
 const Navbar = ({ page, setPage, theme, toggleTheme }) => {
   const [scrolled, setScrolled] = React.useState(false);
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = React.useState(false);     // menú móvil
+  const [drop, setDrop] = React.useState(null);      // grupo desplegado por clic/teclado
+  const [overHero, setOverHero] = React.useState(page === 'home');
+  const dropRef = React.useRef(null);
+
   React.useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
-    window.addEventListener('scroll', onScroll);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  // Cambiar de página cierra todo y vuelve a mirar si la página arranca con
+  // una imagen bajo la nav (hero del home o PageHero): ahí los links van en
+  // blanco aunque el tema sea claro.
+  React.useEffect(() => {
+    setOpen(false); setDrop(null);
+    const mirar = () => setOverHero(!!document.querySelector('main .home-hero, main .page-hero'));
+    mirar();
+    const t1 = setTimeout(mirar, 120), t2 = setTimeout(mirar, 600);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [page]);
+
+  // Menú móvil abierto: bloquea el scroll del fondo. Escape cierra todo.
+  React.useEffect(() => {
+    document.body.classList.toggle('nav-sheet-open', open);
+    const onKey = (e) => { if (e.key === 'Escape') { setOpen(false); setDrop(null); } };
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); document.body.classList.remove('nav-sheet-open'); };
+  }, [open]);
+
+  // Clic fuera del desplegable lo cierra.
+  React.useEffect(() => {
+    if (!drop) return;
+    const onDoc = (e) => { if (dropRef.current && !dropRef.current.contains(e.target)) setDrop(null); };
+    document.addEventListener('pointerdown', onDoc);
+    return () => document.removeEventListener('pointerdown', onDoc);
+  }, [drop]);
+
+  // El blur suelta el :focus-within, que si no deja el desplegable abierto.
+  const go = (id) => (e) => { e.preventDefault(); if (e.currentTarget.blur) e.currentTarget.blur(); setPage(id); setOpen(false); setDrop(null); };
+
+  const cls = ['nav', scrolled || open ? 'scrolled' : '', overHero && !scrolled && !open ? 'on-hero' : '', open ? 'menu-open' : ''].join(' ');
+
   return (
     <>
-      <nav className={`nav ${scrolled ? 'scrolled' : ''}`}>
+      <nav className={cls} aria-label="Principal">
         <div className="nav-inner">
-          <a className="nav-brand" onClick={(e) => { e.preventDefault(); setPage('home'); }} href="#">
-            <Logo size={36} />
+          <a className="nav-brand" href="#/" onClick={go('home')} aria-label="SOCIEM-UNA · Inicio">
+            <Logo size={38} />
             <Wordmark />
           </a>
+
           <div className="nav-links">
-            {NAV_ITEMS.map(item => (
-              <a key={item.id} className={`nav-link ${page === item.id ? 'active' : ''}`}
-                 href="#" onClick={(e) => { e.preventDefault(); setPage(item.id); }}>
-                {item.label}
+            {NAV_GROUPS.map(g => g.children ? (
+              <div key={g.id} ref={dropRef} className={`nav-group ${drop === g.id ? 'open' : ''}`}>
+                <button type="button"
+                  className={`nav-link nav-group-btn ${g.children.some(c => c.id === page) ? 'active' : ''}`}
+                  aria-expanded={drop === g.id} aria-haspopup="true"
+                  onClick={() => setDrop(d => d === g.id ? null : g.id)}>
+                  {g.label} <Icon name="chevDown" size={14} />
+                </button>
+                <div className="nav-drop" role="menu">
+                  {g.children.map(c => (
+                    <a key={c.id} role="menuitem" href={'#/' + c.id} onClick={go(c.id)}
+                       className={`nav-drop-item ${page === c.id ? 'active' : ''}`}>
+                      <span className="nav-drop-ico"><Icon name={c.icon} size={18} /></span>
+                      <span className="nav-drop-txt">
+                        <span className="nav-drop-label">{c.label}</span>
+                        <span className="nav-drop-desc">{c.desc}</span>
+                      </span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <a key={g.id} className={`nav-link ${page === g.id ? 'active' : ''}`}
+                 aria-current={page === g.id ? 'page' : undefined}
+                 href={'#/' + g.id} onClick={go(g.id)}>
+                {g.label}
               </a>
             ))}
           </div>
-          <div className="flex items-center gap-3">
-            <button className="icon-btn nav-cta-secondary" onClick={toggleTheme} aria-label="Toggle theme" style={{ width: 38, height: 38 }}>
+
+          <div className="nav-actions">
+            <button className="icon-btn nav-theme nav-cta-secondary" onClick={toggleTheme}
+                    aria-label={theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}>
               <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} />
             </button>
-            <a className="btn btn-primary" href="#" onClick={(e) => { e.preventDefault(); setPage('registro'); }}>
+            <a className="btn btn-gold nav-join" href="#/registro" onClick={go('registro')}>
               Únete <Icon name="arrowUpRight" size={14} />
             </a>
-            <button className="hamburger" onClick={() => setOpen(o => !o)} aria-label="Menu">
+            <button className="hamburger" onClick={() => setOpen(o => !o)}
+                    aria-label={open ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={open} aria-controls="nav-sheet">
               <Icon name={open ? 'close' : 'menu'} size={20} />
             </button>
           </div>
         </div>
       </nav>
-      <div className={`mobile-menu ${open ? 'open' : ''}`}>
-        {NAV_ITEMS.map(item => (
-          <a key={item.id} href="#" onClick={(e) => { e.preventDefault(); setPage(item.id); setOpen(false); }}>
-            {item.label}
-          </a>
-        ))}
-        <a href="#" onClick={(e) => { e.preventDefault(); setPage('registro'); setOpen(false); }} style={{ marginTop: 24, color: 'var(--violet-600)' }}>
-          Únete a SOCIEM-UNA →
-        </a>
+
+      {/* Menú móvil a pantalla completa (DESIGN.md › Navigation pública). */}
+      <div id="nav-sheet" className={`nav-sheet ${open ? 'open' : ''}`} aria-hidden={!open}>
+        <div className="nav-sheet-inner">
+          <ol className="nav-sheet-links">
+            {NAV_ITEMS.map((item, i) => (
+              <li key={item.id} style={{ '--i': i }}>
+                <a href={'#/' + item.id} onClick={go(item.id)} className={page === item.id ? 'active' : ''}
+                   tabIndex={open ? 0 : -1}>
+                  <span className="nav-sheet-num mono">{String(i + 1).padStart(2, '0')}</span>
+                  {item.label}
+                </a>
+              </li>
+            ))}
+          </ol>
+          <div className="nav-sheet-foot">
+            <a className="btn btn-gold nav-sheet-cta" href="#/registro" onClick={go('registro')} tabIndex={open ? 0 : -1}>
+              Únete a SOCIEM-UNA <Icon name="arrowUpRight" size={14} />
+            </a>
+            <div className="nav-sheet-row">
+              <RedesLinks />
+              <button className="icon-btn" onClick={toggleTheme} tabIndex={open ? 0 : -1}
+                      aria-label={theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'}>
+                <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={16} />
+              </button>
+            </div>
+            <p className="caption">Filial oficial de IFMSA-Perú y SOCIMEP · UNA Puno</p>
+          </div>
+        </div>
       </div>
     </>
   );
 };
 
 // ============ Footer ============
-const Footer = ({ setPage }) => (
-  <footer className="footer">
-    <div className="container">
-      <div className="grid" style={{ gridTemplateColumns: '1.4fr 1fr 1fr 1fr', gap: 48 }}>
-        <div>
-          <div className="flex items-center gap-3 mb-6">
-            <Logo size={44} />
-            <Wordmark inverse />
-          </div>
-          <p style={{ color: '#B8B1C5', fontSize: 14.5, maxWidth: 320, lineHeight: 1.6 }}>
-            Sociedad Científica de Estudiantes de Medicina de la Universidad Nacional del Altiplano. Filial oficial de IFMSA-Perú y SOCIMEP.
-          </p>
-          <div className="flex gap-3 mt-6">
-            <a href="https://www.facebook.com/share/1Ag5jhmu7K/" target="_blank" rel="noopener noreferrer" aria-label="Facebook de SOCIEM-UNA" className="icon-btn" style={{ background: 'rgba(255,255,255,.08)', color: '#fff' }}><Icon name="facebook" size={15} /></a>
-            <a href="https://www.instagram.com/sociem_una_puno" target="_blank" rel="noopener noreferrer" aria-label="Instagram de SOCIEM-UNA" className="icon-btn" style={{ background: 'rgba(255,255,255,.08)', color: '#fff' }}><Icon name="instagram" size={15} /></a>
-            <a href="mailto:sociem.una@gmail.com" aria-label="Escribir a SOCIEM-UNA por correo" className="icon-btn" style={{ background: 'rgba(255,255,255,.08)', color: '#fff' }}><Icon name="mail" size={15} /></a>
-          </div>
-        </div>
-        <div>
-          <h4>Sociedad</h4>
-          <div className="flex" style={{ flexDirection: 'column', gap: 12 }}>
-            <a href="#" onClick={(e) => { e.preventDefault(); setPage('nosotros'); }}>Nosotros</a>
-            <a href="#" onClick={(e) => { e.preventDefault(); setPage('directorio'); }}>Directorio</a>
-            <a href="#" onClick={(e) => { e.preventDefault(); setPage('comites'); }}>Comités</a>
-            <a href="#" onClick={(e) => { e.preventDefault(); setPage('miembros'); }}>Miembros</a>
-          </div>
-        </div>
-        <div>
-          <h4>Recursos</h4>
-          <div className="flex" style={{ flexDirection: 'column', gap: 12 }}>
-            <a href="#" onClick={(e) => { e.preventDefault(); setPage('actividades'); }}>Actividades</a>
-            <a href="#" onClick={(e) => { e.preventDefault(); setPage('certificados'); }}>Certificados</a>
-            <a href="https://forms.gle/Lk5QrJPaEaQVxLvF8" target="_blank" rel="noopener noreferrer">Inscripción</a>
-            <a href="#" onClick={(e) => { e.preventDefault(); setPage('contacto'); }}>Contacto</a>
-            <a href="#" onClick={(e) => { e.preventDefault(); setPage('admin'); }}>Acceso interno</a>
-          </div>
-        </div>
-        <div>
-          <h4>Contacto</h4>
-          <div className="flex" style={{ flexDirection: 'column', gap: 12, color: '#B8B1C5', fontSize: 14 }}>
-            <span>Universidad Nacional<br />del Altiplano</span>
-            <span>Facultad de Medicina Humana<br />Av. Floral 1153, Puno</span>
-            <a href="mailto:sociem.una@gmail.com">sociem.una@gmail.com</a>
+const SHELL_FOOTER_COLS = [
+  { title: 'Sociedad', links: [['nosotros', 'Nosotros'], ['directorio', 'Directorio'], ['comites', 'Comités'], ['miembros', 'Miembros']] },
+  { title: 'Participa', links: [['eventos', 'Eventos'], ['actividades', 'Actividades'], ['noticias', 'Noticias'], ['registro', 'Únete']] },
+  { title: 'Servicios', links: [['certificados', 'Verificar certificado'], ['tienda', 'Tienda'], ['contacto', 'Contacto'], ['admin', 'Acceso interno']] },
+];
+// Orden de la franja: IFMSA, SOCIMEP y divisiones de soporte.
+const SHELL_FOOTER_LOGOS = ['SCOME', 'SCOPH', 'SCORP', 'SCORA', 'SCOPE', 'SCORE', 'CPC', 'CPPC', 'CPA', 'CPAIS', 'CPDII', 'CPRII', 'DSE', 'DSNT', 'DSP'];
+
+const Footer = ({ setPage }) => {
+  const go = (id) => (e) => { e.preventDefault(); setPage(id); };
+  return (
+    <footer className="footer site-footer">
+      {/* Franja de comités: marquee sutil, se pausa al hover (styles.css). */}
+      <div className="footer-logos" aria-label="Comités y divisiones de SOCIEM-UNA">
+        <div className="marquee">
+          <div className="marquee-track">
+            {SHELL_FOOTER_LOGOS.concat(SHELL_FOOTER_LOGOS).map((c, i) => (
+              <a key={i} href="#/comites" onClick={go('comites')} className="footer-logo"
+                 aria-hidden={i >= SHELL_FOOTER_LOGOS.length} tabIndex={i >= SHELL_FOOTER_LOGOS.length ? -1 : 0} title={c}>
+                <img src={comiteLogoSm(c)} alt={i < SHELL_FOOTER_LOGOS.length ? c : ''} width="44" height="44" loading="lazy" />
+              </a>
+            ))}
           </div>
         </div>
       </div>
-      <div style={{ marginTop: 64, paddingTop: 28, borderTop: '1px solid rgba(255,255,255,.08)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16, fontSize: 13, color: '#807A8C' }}>
-        <span>© 2026 SOCIEM-UNA · Todos los derechos reservados</span>
-        <span>Filial · IFMSA-Perú · SOCIMEP · UNA Puno</span>
+
+      <div className="container">
+        <div className="footer-top">
+          <div className="footer-brand">
+            <a href="#/" onClick={go('home')} className="footer-brand-mark" aria-label="SOCIEM-UNA · Inicio">
+              <Logo size={52} />
+              <Wordmark inverse />
+            </a>
+            <p>
+              Sociedad Científica de Estudiantes de Medicina de la Universidad Nacional del Altiplano.
+              Filial oficial de IFMSA-Perú y SOCIMEP.
+            </p>
+            <RedesLinks className="footer-redes" />
+          </div>
+          {SHELL_FOOTER_COLS.map(col => (
+            <div key={col.title} className="footer-col">
+              <h4>{col.title}</h4>
+              <ul>
+                {col.links.map(([id, label]) => (
+                  <li key={id}><a href={'#/' + id} onClick={go(id)}>{label}</a></li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          <div className="footer-col">
+            <h4>Contacto</h4>
+            <ul>
+              <li className="footer-txt">Facultad de Medicina Humana<br />Av. Floral 1153, Puno</li>
+              <li><a href="mailto:sociem.una@gmail.com">sociem.una@gmail.com</a></li>
+              <li><a href="https://forms.gle/Lk5QrJPaEaQVxLvF8" target="_blank" rel="noopener noreferrer">Formulario de inscripción <Icon name="arrowUpRight" size={12} /></a></li>
+            </ul>
+          </div>
+        </div>
+
+        {/* Wordmark gigante: firma visual del cierre, decorativo. */}
+        <div className="footer-word" aria-hidden="true">SOCIEM<em>una</em></div>
+
+        <div className="footer-legal">
+          <span>© {new Date().getFullYear()} SOCIEM-UNA · Todos los derechos reservados</span>
+          <span className="mono">PUNO · 3 827 MSNM · 15°50′S 70°01′O</span>
+          <span>Filial · IFMSA-Perú · SOCIMEP · UNA Puno</span>
+        </div>
       </div>
-    </div>
-  </footer>
-);
+    </footer>
+  );
+};
+
+// ============ Barra "Próximo evento" ============
+// El "now playing" del sitio (DESIGN.md): píldora flotante abajo con el
+// evento más cercano y su cuenta regresiva. Si no hay evento futuro, si la API
+// falla o si el visitante la cerró (sessionStorage, por evento), no aparece.
+const SHELL_EVBAR_KEY = 'sociem_evbar_cerrado';
+
+// fecha "2026-06-25" (o ISO de Sheets) + hora "17:00" → ms, en hora de Lima.
+const evbarHora = (fecha, hora) => {
+  const d = String(fecha || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+  const m = String(hora || '').match(/(\d{1,2}):(\d{2})/);
+  const t = Date.parse(`${d}T${m ? m[1].padStart(2, '0') : '00'}:${m ? m[2] : '00'}:00-05:00`);
+  return isNaN(t) ? null : t;
+};
+
+const evbarProximo = (lista, ahora) => (lista || [])
+  .filter(ev => ev && ev.titulo && !/FINALIZADO|CANCELADO/i.test(String(ev.estado || '')))
+  .map(ev => {
+    const fecha = ev.fecha || ev.fecha_inicio;
+    const ini = evbarHora(fecha, ev.hora_inicio);
+    if (ini == null) return null;
+    const finH = evbarHora(fecha, ev.hora_fin);
+    // Sin hora de fin: dos horas; sin hora alguna: todo el día.
+    const fin = finH && finH > ini ? finH : ev.hora_inicio ? ini + 2 * 3600e3 : ini + 24 * 3600e3;
+    return { ev, ini, fin };
+  })
+  .filter(x => x && x.fin > ahora)
+  .sort((a, b) => a.ini - b.ini)[0] || null;
+
+const evbarCuenta = (ms) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+  const p = (n) => String(n).padStart(2, '0');
+  return (d ? d + 'd ' : '') + p(h) + ':' + p(m) + ':' + p(x);
+};
+
+const NextEventBar = ({ page }) => {
+  const [prox, setProx] = React.useState(null);
+  const [cerrado, setCerrado] = React.useState(() => { try { return sessionStorage.getItem(SHELL_EVBAR_KEY) || ''; } catch (e) { return ''; } });
+  const [ahora, setAhora] = React.useState(Date.now());
+
+  React.useEffect(() => {
+    if (!window.SOCIEM_API) return;
+    let vivo = true;
+    window.SOCIEM_API.get('eventos', 'list').then(r => {
+      if (!vivo || !r || !r.ok) return;
+      const lista = Array.isArray(r.data) ? r.data : Array.isArray(r.items) ? r.items : [];
+      setProx(evbarProximo(lista, Date.now()));
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
+  React.useEffect(() => {
+    if (!prox) return;
+    const t = setInterval(() => setAhora(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [prox]);
+
+  const id = prox ? String(prox.ev.id || prox.ev.titulo) : '';
+  // En #/eventos sobra (ya está la lista) y en admin no va nunca.
+  const visible = !!prox && ahora < prox.fin && cerrado !== id && page !== 'eventos' && page !== 'admin';
+
+  // El footer reserva sitio para que la barra no tape la línea legal.
+  React.useEffect(() => {
+    document.body.classList.toggle('con-evbar', visible);
+    return () => document.body.classList.remove('con-evbar');
+  }, [visible]);
+
+  if (!visible) return null;
+
+  const { ev, ini } = prox;
+  const enCurso = ahora >= ini;
+  const flyer = IMG(ev.flyer_url) || 'assets/eventos/evento-default.jpg';
+  let fecha = '';
+  try { fecha = new Date(ini).toLocaleDateString('es-PE', { weekday: 'short', day: '2-digit', month: 'short', timeZone: 'America/Lima' }); } catch (e) {}
+  const cerrar = () => { try { sessionStorage.setItem(SHELL_EVBAR_KEY, id); } catch (e) {} setCerrado(id); };
+
+  return (
+    <aside className="evbar" aria-label="Próximo evento">
+      <a className="evbar-thumb" href="#/eventos" tabIndex={-1} aria-hidden="true">
+        <img src={flyer} alt="" onError={(e) => { const el = e.currentTarget; if (!el.dataset.fb) { el.dataset.fb = '1'; el.src = 'assets/eventos/evento-default.jpg'; } else { el.style.visibility = 'hidden'; } }} />
+      </a>
+      <div className="evbar-info">
+        <div className="evbar-kicker">
+          {enCurso ? <><span className="live-dot" /> En curso</> : 'Próximo evento'}
+          <span className="evbar-fecha">{fecha}{ev.hora_inicio ? ' · ' + ev.hora_inicio : ''}</span>
+        </div>
+        <a className="evbar-title" href="#/eventos" title={ev.titulo}>{ev.titulo}</a>
+      </div>
+      {!enCurso && <div className="evbar-count mono" title="Tiempo para el inicio">{evbarCuenta(ini - ahora)}</div>}
+      <a className="btn btn-primary btn-sm evbar-cta" href="#/eventos">
+        Inscribirme <Icon name="arrowUpRight" size={13} />
+      </a>
+      <button className="evbar-close" onClick={cerrar} aria-label="Ocultar el próximo evento">
+        <Icon name="close" size={15} />
+      </button>
+    </aside>
+  );
+};
 
 // Tarjeta de error de red: distingue "falló la carga" de "no hay datos".
 // Las páginas la muestran cuando la API devuelve ok:false o lanza.
 const LoadErrorCard = ({ onRetry, children }) => (
-  <div className="card mt-8" style={{ padding: 40, textAlign: 'center' }}>
-    <img src="assets/mascota/mascota-error.png?v=3" alt="" style={{ width: 130, margin: '0 auto 4px', display: 'block' }} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-    <p className="mt-3" style={{ color: 'var(--fg-muted)', maxWidth: 420, margin: '12px auto 0' }}>
+  <div className="card load-error" role="alert">
+    <span className="halo halo-violet load-error-halo" aria-hidden="true" />
+    <img className="load-error-img" src="assets/mascota/mascota-error.png?v=3" alt=""
+         onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+    <div className="eyebrow muted">Se cortó la señal</div>
+    <p className="load-error-msg">
       {children || 'No pudimos cargar la información. Revisa tu conexión e inténtalo de nuevo.'}
     </p>
     {onRetry && (
-      <button className="btn btn-primary" style={{ marginTop: 18 }} onClick={onRetry}>
+      <button className="btn btn-primary" onClick={onRetry}>
         <Icon name="refresh" size={14} /> Reintentar
       </button>
     )}
@@ -290,26 +536,73 @@ const LoadErrorCard = ({ onRetry, children }) => (
 
 // Página 404: la mascota busca la página perdida y ofrece rutas de rescate.
 const NotFoundPage = ({ intento }) => (
-  <section style={{ maxWidth: 720, margin: '0 auto', padding: '130px 24px 100px', textAlign: 'center' }}>
-    <img
-      src="assets/mascota/mascota-404.png?v=3" alt="Mascota de SOCIEM-UNA buscando la página con una lupa"
-      style={{ width: 210, margin: '0 auto 8px', display: 'block' }}
-      onError={(e) => { if (!e.currentTarget.dataset.alt) { e.currentTarget.dataset.alt = '1'; e.currentTarget.src = 'assets/mascota/mascota-error.png?v=3'; } else { e.currentTarget.style.display = 'none'; } }}
-    />
-    <div className="mono small" style={{ color: 'var(--violet-600)', letterSpacing: '0.14em' }}>ERROR 404</div>
-    <h1 className="serif mt-2" style={{ fontSize: 'clamp(34px, 5vw, 54px)', lineHeight: 1.05 }}>
-      Buscamos por todo el altiplano y esta página no aparece.
-    </h1>
-    <p className="mt-4" style={{ color: 'var(--fg-muted)', maxWidth: '48ch', margin: '16px auto 0' }}>
-      {intento ? <>La dirección <code style={{ background: 'var(--bg-soft)', padding: '2px 8px', borderRadius: 6 }}>#/{intento}</code> no existe o fue movida.</> : 'La dirección que escribiste no existe o fue movida.'}
-    </p>
-    <div className="flex justify-center gap-3 mt-8" style={{ marginTop: 32, flexWrap: 'wrap' }}>
-      <a className="btn btn-primary" href="#/home">Volver al inicio</a>
-      <a className="btn btn-ghost" href="#/eventos">Ver eventos</a>
-      <a className="btn btn-ghost" href="#/noticias">Leer noticias</a>
-      <a className="btn btn-ghost" href="#/contacto">Escríbenos</a>
+  <section className="nf">
+    <span className="halo halo-violet nf-halo" aria-hidden="true" />
+    <div className="container nf-inner">
+      <div className="nf-visual" aria-hidden="true">
+        <span className="nf-num">404</span>
+        <img
+          className="nf-mascota"
+          src="assets/mascota/mascota-404.png?v=3" alt=""
+          onError={(e) => { if (!e.currentTarget.dataset.alt) { e.currentTarget.dataset.alt = '1'; e.currentTarget.src = 'assets/mascota/mascota-error.png?v=3'; } else { e.currentTarget.style.display = 'none'; } }}
+        />
+      </div>
+      <div className="eyebrow">Error 404 · Página no encontrada</div>
+      <h1 className="h1 nf-title">Buscamos por todo el altiplano y <em>esta página no aparece</em>.</h1>
+      <p className="lede nf-lede">
+        {intento ? <>La dirección <code className="nf-code mono">#/{intento}</code> no existe o fue movida.</> : 'La dirección que escribiste no existe o fue movida.'}
+      </p>
+      <div className="nf-actions">
+        <a className="btn btn-primary" href="#/home"><Icon name="home" size={15} /> Volver al inicio</a>
+        <a className="btn btn-ghost" href="#/eventos">Ver eventos</a>
+      </div>
+      <div className="chip-row nf-chips">
+        <a className="chip" href="#/noticias">Noticias</a>
+        <a className="chip" href="#/comites">Comités</a>
+        <a className="chip" href="#/certificados">Verificar certificado</a>
+        <a className="chip" href="#/contacto">Escríbenos</a>
+      </div>
     </div>
   </section>
 );
 
-Object.assign(window, { Icon, Logo, ComiteLogo, comiteLogoUrl, Wordmark, Navbar, Footer, NAV_ITEMS, LoadErrorCard, NotFoundPage });
+
+// ============ PageHero ============
+// Cabecera nocturna de las páginas internas (DESIGN.md › Hero). La imagen del
+// set "Noche Altiplánica" va a sangre bajo la nav; si aún no existe cae a
+// `fallback` y, si tampoco, queda el degradado de fondo.
+const PageHero = ({ img, fallback = 'assets/hero/hero-altiplano.jpg', eyebrow, title, lede, children, align = 'left' }) => (
+  <section className="page-hero">
+    <div className="page-hero-bg" aria-hidden="true">
+      {img && <img src={img} alt="" onError={(e) => { const el = e.currentTarget; if (fallback && !el.dataset.fb) { el.dataset.fb = '1'; el.src = fallback; } else { el.style.display = 'none'; } }} />}
+      <div className="hero-grain" />
+    </div>
+    <div className="container" style={{ textAlign: align, width: '100%' }}>
+      {eyebrow && <div className="eyebrow fade-up">{eyebrow}</div>}
+      <h1 className="h1 fade-up d1" style={{ marginTop: 16, maxWidth: align === 'center' ? 860 : 820, marginLeft: align === 'center' ? 'auto' : 0, marginRight: align === 'center' ? 'auto' : 0 }}>{title}</h1>
+      {lede && <p className="lede fade-up d2" style={{ marginTop: 20, marginLeft: align === 'center' ? 'auto' : 0, marginRight: align === 'center' ? 'auto' : 0 }}>{lede}</p>}
+      {children && <div className="fade-up d3" style={{ marginTop: 28 }}>{children}</div>}
+    </div>
+  </section>
+);
+
+// ============ useReveal ============
+// Activa .reveal → .is-in al entrar en viewport. Basta llamarlo una vez por
+// página: observa todos los .reveal del documento, incluidos los que llegan
+// después con datos de la API.
+const useReveal = (deps = []) => {
+  React.useEffect(() => {
+    if (!('IntersectionObserver' in window)) { document.querySelectorAll('.reveal').forEach(n => n.classList.add('is-in')); return; }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(en => { if (en.isIntersecting) { en.target.classList.add('is-in'); io.unobserve(en.target); } });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    const scan = () => document.querySelectorAll('.reveal:not(.is-in)').forEach(n => io.observe(n));
+    scan();
+    const mo = new MutationObserver(scan);
+    mo.observe(document.body, { childList: true, subtree: true });
+    return () => { io.disconnect(); mo.disconnect(); };
+  }, deps);
+};
+
+
+Object.assign(window, { Icon, Logo, ComiteLogo, comiteLogoUrl, comiteLogoSm, Wordmark, Navbar, NextEventBar, Footer, NAV_ITEMS, NAV_GROUPS, RedesLinks, LoadErrorCard, NotFoundPage, PageHero, useReveal });

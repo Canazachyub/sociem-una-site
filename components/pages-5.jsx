@@ -298,6 +298,33 @@ const useCertConfig = () => {
 
 // ───────────────────────── Página pública ─────────────────────────
 
+const certEsAnulado = (c) => String((c && c.estado) || '').toUpperCase() === 'ANULADO';
+
+// Enlace público de verificación: el mismo que codifica el QR de la lámina,
+// pero relativo al sitio donde se está mirando (sirve también en local).
+const certLinkVerificacion = (c) => `${location.origin}${location.pathname}#/certificados/${encodeURIComponent((c && c.codigo) || '')}`;
+
+// Sello dorado de "verificado" (DESIGN.md › el oro marca lo valioso).
+const CertSello = () => (
+  <div className="cert-sello" aria-label="Certificado verificado">
+    <svg viewBox="0 0 120 120" className="cert-sello-aro" aria-hidden="true">
+      <defs><path id="certSelloCirc" d="M60,60 m-44,0 a44,44 0 1,1 88,0 a44,44 0 1,1 -88,0" /></defs>
+      <text><textPath href="#certSelloCirc" startOffset="0">· VERIFICADO · SOCIEM-UNA · AUTÉNTICO </textPath></text>
+    </svg>
+    <span className="cert-sello-centro"><Icon name="check" size={26} /></span>
+  </div>
+);
+
+// Mesa oscura con la lámina encima: el papel sigue siendo blanco (DESIGN.md ›
+// Excepción) y aquí solo se le da el entorno y la sombra.
+const CertMesa = ({ cert, cfg, compacta }) => (
+  <div className={'cert-mesa' + (compacta ? ' cert-mesa-compacta' : '')}>
+    <div className="cert-mesa-papel">
+      <CertEscala><CertificadoHoja cert={cert} cfg={cfg} /></CertEscala>
+    </div>
+  </div>
+);
+
 const CertificadosPage = ({ sub }) => {
   const cfg = useCertConfig();
   const { cola, imprimir } = useImpresion();
@@ -306,6 +333,9 @@ const CertificadosPage = ({ sub }) => {
   const [error, setError] = React.useState('');
   const [resultados, setResultados] = React.useState(null);
   const [abierto, setAbierto] = React.useState(null);
+  const [modo, setModo] = React.useState(sub ? 'codigo' : ''); // 'dni' | 'codigo' (solo presentación)
+  const [copiado, setCopiado] = React.useState(false);
+  const resultadoRef = React.useRef(null);
 
   const buscar = React.useCallback(async (texto) => {
     const t = String(texto || '').trim();
@@ -314,6 +344,7 @@ const CertificadosPage = ({ sub }) => {
     try {
       const soloDigitos = t.replace(/\D/g, '');
       const esDni = /^\d{8}$/.test(soloDigitos) && !/[a-zA-Z]/.test(t);
+      setModo(esDni ? 'dni' : 'codigo');
       if (esDni) {
         const r = await window.SOCIEM_API.get('certificados', 'buscar', { dni: soloDigitos });
         const items = (r && (r.items || r.data)) || [];
@@ -339,97 +370,177 @@ const CertificadosPage = ({ sub }) => {
     if (sub) { setQ(sub); buscar(sub); }
   }, [sub, buscar]);
 
+  // Al abrir un certificado, lleva la vista al resultado (el hero es alto).
+  React.useEffect(() => {
+    if (!abierto || !resultadoRef.current) return;
+    const t = setTimeout(() => {
+      try { resultadoRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { /* navegadores viejos */ }
+    }, 80);
+    return () => clearTimeout(t);
+  }, [abierto]);
+
+  const copiarEnlace = (c) => {
+    const url = certLinkVerificacion(c);
+    const ok = () => { setCopiado(true); setTimeout(() => setCopiado(false), 2200); };
+    if (navigator.clipboard) navigator.clipboard.writeText(url).then(ok, () => window.prompt('Copia el enlace:', url));
+    else window.prompt('Copia el enlace:', url);
+  };
+
+  const varios = resultados && resultados.length > 1;
+  const sinResultados = resultados && resultados.length === 0;
+  const anuladoAbierto = certEsAnulado(abierto);
+  // El aviso del buscador cubre validación y fallos de red. "Sin resultados" y
+  // "anulado" tienen su propio bloque abajo, así que no se repiten aquí.
+  const avisoArriba = error && !sinResultados && !anuladoAbierto;
+  const verificadoQR = modo === 'codigo' && abierto && !anuladoAbierto;
+
   return (
     <>
-      <section className="section" style={{ paddingBottom: 24 }}>
-        <div className="container">
-          <div className="mono small" style={{ color: 'var(--fg-muted)', letterSpacing: '.18em' }}>SOCIEM-UNA</div>
-          <h1 className="serif" style={{ fontSize: 'clamp(32px, 5vw, 48px)', margin: '8px 0 12px' }}>Certificados</h1>
-          <p style={{ color: 'var(--fg-muted)', maxWidth: 620, lineHeight: 1.6 }}>
-            Consulta y descarga los certificados de las actividades de la sociedad.
-            Busca con tu <b>DNI</b> para ver todos los tuyos, o con el <b>código</b> impreso
-            en el certificado para verificar su autenticidad.
-          </p>
+      <PageHero
+        img="assets/banners/certificados-banner.jpg"
+        eyebrow={sub ? 'Verificación por QR' : 'Certificados · SOCIEM-UNA'}
+        title={sub ? <>Verificación de <em>autenticidad</em></> : <>Tus certificados, <em>siempre a mano</em></>}
+        lede={sub
+          ? 'Comprobamos el código impreso en el certificado contra el registro oficial de la sociedad.'
+          : 'Busca con tu DNI para ver todos los tuyos, o con el código impreso para comprobar que un certificado es auténtico.'}
+      >
+        <form className="cert-buscador" onSubmit={(e) => { e.preventDefault(); buscar(q); }} role="search">
+          <label className="cert-search">
+            <Icon name="search" size={18} />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="DNI o código · SOC-2026-K7M2Q9"
+              aria-label="DNI o código de certificado"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+          <button className="btn btn-primary cert-search-btn" type="submit" disabled={cargando}>
+            {cargando ? <><span className="cert-spin" aria-hidden="true" /> Buscando…</> : <>Buscar</>}
+          </button>
+        </form>
+        <div className="cert-search-hint">
+          <span><Icon name="user" size={13} /> DNI de 8 dígitos → todos tus certificados</span>
+          <span><Icon name="shield" size={13} /> Código impreso → verificación</span>
+        </div>
+        {avisoArriba && (
+          <div className="cert-alerta" role="alert"><Icon name="close" size={14} /> {error}</div>
+        )}
+      </PageHero>
 
-          <div className="card" style={{ padding: 20, marginTop: 26, maxWidth: 620 }}>
-            <form onSubmit={(e) => { e.preventDefault(); buscar(q); }}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 8 }}>DNI o código de certificado</label>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <input
-                  className="input"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="12345678  ·  SOC-2026-K7M2Q9"
-                  style={{ flex: '1 1 240px', minWidth: 0 }}
-                  autoComplete="off"
-                />
-                <button className="btn btn-primary" type="submit" disabled={cargando}>
-                  <Icon name="search" size={15} /> {cargando ? 'Buscando…' : 'Buscar'}
-                </button>
+      <section className="cert-zona">
+        <div className="container">
+          {cargando && (
+            <div className="cert-resultado" aria-busy="true">
+              <div className="skeleton cert-skel-ficha" />
+              <div className="skeleton cert-skel-mesa" />
+            </div>
+          )}
+
+          {!cargando && varios && (
+            <div className="cert-lista-wrap">
+              <div className="cert-lista-head">
+                <div className="label">Resultados</div>
+                <h2 className="h3">{resultados.length} certificados encontrados</h2>
               </div>
-            </form>
-            {error && (
-              <div style={{ marginTop: 14, padding: '11px 14px', borderRadius: 10, background: 'var(--violet-50)', color: 'var(--violet-800)', fontSize: 13.5, lineHeight: 1.5 }}>
-                {error}
+              <div className="cert-lista">
+                {resultados.map(c => {
+                  const activo = abierto && abierto.codigo === c.codigo;
+                  return (
+                    <button key={c.codigo} type="button" className={'cert-item' + (activo ? ' is-activo' : '')} onClick={() => setAbierto(c)} aria-pressed={activo}>
+                      <div className="cert-item-top">
+                        <span className="mono cert-item-cod">{c.codigo}</span>
+                        {certEsAnulado(c)
+                          ? <span className="badge badge-red"><span className="badge-dot" />Anulado</span>
+                          : <span className="badge badge-green"><span className="badge-dot" />Válido</span>}
+                      </div>
+                      <div className="cert-item-tit">{c.actividad}</div>
+                      <div className="cert-item-meta">{[c.rol, certComitesTexto(c.comite), certFechaCorta(c.fecha)].filter(Boolean).join(' · ')}</div>
+                      <span className="cert-item-ver">{activo ? 'Abierto' : 'Ver'} <Icon name="arrow" size={13} /></span>
+                    </button>
+                  );
+                })}
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {!cargando && abierto && (
+            <div className="cert-resultado" ref={resultadoRef}>
+              <aside className={'cert-ficha' + (anuladoAbierto ? ' is-anulado' : ' is-valido')}>
+                {verificadoQR && <CertSello />}
+                <div className="cert-estado">
+                  <span className="cert-estado-ic"><Icon name={anuladoAbierto ? 'close' : 'check'} size={20} /></span>
+                  <div>
+                    <div className="cert-estado-tit">{anuladoAbierto ? 'Certificado anulado' : (modo === 'codigo' ? 'Certificado auténtico' : 'Certificado válido')}</div>
+                    <div className="cert-estado-txt">
+                      {anuladoAbierto
+                        ? 'La organización anuló este certificado: no tiene validez.'
+                        : 'Emitido por SOCIEM-UNA y registrado en el sistema oficial.'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="cert-ficha-nombre">{abierto.nombres || '—'}</div>
+                <dl className="cert-datos">
+                  {(abierto.dni || abierto.dni_masked) && <><dt>DNI</dt><dd className="mono">{abierto.dni || abierto.dni_masked}</dd></>}
+                  <dt>Actividad</dt><dd>{abierto.actividad || '—'}</dd>
+                  {abierto.rol && <><dt>Calidad</dt><dd>{String(abierto.rol).charAt(0) + String(abierto.rol).slice(1).toLowerCase()}</dd></>}
+                  {abierto.comite && <><dt>Comité</dt><dd>{certComitesTexto(abierto.comite)}{certEsColaborativa(abierto.tipo_actividad) ? ' · colaborativa' : ''}</dd></>}
+                  {abierto.fecha && <><dt>Fecha</dt><dd>{certFecha(abierto.fecha)}</dd></>}
+                  {abierto.valido_por && <><dt>Válido por</dt><dd>{abierto.valido_por}</dd></>}
+                  <dt>Código</dt><dd className="mono cert-datos-cod">{abierto.codigo}</dd>
+                </dl>
+
+                <div className="cert-acciones">
+                  <button className={'btn ' + (anuladoAbierto ? 'btn-secondary' : 'btn-gold')} onClick={() => imprimir([abierto])}>
+                    <Icon name="download" size={16} /> Descargar PDF
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => imprimir([abierto])}>
+                    Imprimir
+                  </button>
+                  <button className="btn btn-text cert-copiar" onClick={() => copiarEnlace(abierto)}>
+                    <Icon name={copiado ? 'check' : 'link'} size={14} /> {copiado ? 'Enlace copiado' : 'Copiar enlace de verificación'}
+                  </button>
+                </div>
+                <p className="cert-ayuda">
+                  Se abre el diálogo de impresión: elige <b>Guardar como PDF</b> y
+                  tamaño <b>A4 horizontal</b>. El código y el QR permiten a cualquiera
+                  comprobar que el certificado es auténtico.
+                </p>
+              </aside>
+
+              <CertMesa cert={abierto} cfg={cfg} />
+            </div>
+          )}
+
+          {!cargando && !abierto && !varios && (
+            <div className="cert-vacio">
+              <img src="assets/mascota/mascota-certificado.png?v=3" alt="" className="cert-vacio-img" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+              <div className="cert-vacio-txt">
+                {sinResultados ? (
+                  <>
+                    <div className="label">Sin resultados</div>
+                    <h2 className="h3">No encontramos certificados con ese DNI</h2>
+                    <p>{error || 'Si participaste hace poco, puede que aún no estén emitidos.'} Si crees que es un error, escríbenos desde la página de contacto.</p>
+                    <a className="btn-link" href="#/contacto">Ir a contacto <Icon name="arrow" size={14} /></a>
+                  </>
+                ) : (
+                  <>
+                    <div className="label">¿Cómo funciona?</div>
+                    <h2 className="h3">Tres pasos y tienes tu certificado</h2>
+                    <ol className="cert-pasos">
+                      <li><span className="cert-paso-n mono">1</span><div><b>Busca</b> con tu DNI o con el código impreso.</div></li>
+                      <li><span className="cert-paso-n mono">2</span><div><b>Revisa</b> la vista previa y el estado del certificado.</div></li>
+                      <li><span className="cert-paso-n mono">3</span><div><b>Descarga</b> el PDF en A4 horizontal, listo para imprimir.</div></li>
+                    </ol>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </section>
-
-      {resultados && resultados.length > 1 && (
-        <section className="section" style={{ paddingTop: 0 }}>
-          <div className="container">
-            <h2 className="serif" style={{ fontSize: 22, marginBottom: 14 }}>
-              {resultados.length} certificados encontrados
-            </h2>
-            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-              {resultados.map(c => (
-                <button
-                  key={c.codigo}
-                  className="card"
-                  onClick={() => setAbierto(c)}
-                  style={{ padding: 18, textAlign: 'left', cursor: 'pointer', border: abierto && abierto.codigo === c.codigo ? '2px solid var(--violet-600)' : undefined }}
-                >
-                  <div className="mono small" style={{ color: 'var(--fg-muted)' }}>{c.codigo}</div>
-                  <div className="serif" style={{ fontSize: 17, margin: '6px 0 4px', lineHeight: 1.3 }}>{c.actividad}</div>
-                  <div className="small" style={{ color: 'var(--fg-muted)' }}>
-                    {[c.rol, c.comite, certFechaCorta(c.fecha)].filter(Boolean).join(' · ')}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {abierto && (
-        <section className="section" style={{ paddingTop: resultados && resultados.length > 1 ? 24 : 0 }}>
-          <div className="container">
-            <div className="flex justify-between items-center" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
-              <div>
-                <div className="mono small" style={{ color: 'var(--fg-muted)' }}>{abierto.codigo}</div>
-                <h2 className="serif" style={{ fontSize: 24, margin: '4px 0 0' }}>{abierto.nombres}</h2>
-              </div>
-              <div className="flex gap-3">
-                <button className="btn btn-primary" onClick={() => imprimir([abierto])}>
-                  <Icon name="download" size={15} /> Descargar PDF
-                </button>
-              </div>
-            </div>
-
-            <div style={{ background: 'var(--bg-soft)', padding: 'clamp(8px, 2vw, 24px)', borderRadius: 14 }}>
-              <CertEscala><CertificadoHoja cert={abierto} cfg={cfg} /></CertEscala>
-            </div>
-
-            <p className="small" style={{ color: 'var(--fg-muted)', marginTop: 12, maxWidth: 620, lineHeight: 1.5 }}>
-              El botón abre el diálogo de impresión: elige <b>Guardar como PDF</b> y
-              tamaño <b>A4 horizontal</b>. El código y el QR permiten a cualquiera
-              comprobar que este certificado es auténtico.
-            </p>
-          </div>
-        </section>
-      )}
 
       <CertPrintPortal certs={cola} cfg={cfg} />
     </>
@@ -549,6 +660,7 @@ const AdminCertificados = ({ toast }) => {
   const [cargando, setCargando] = React.useState(true);
   const [fallo, setFallo] = React.useState('');
   const [busca, setBusca] = React.useState('');
+  const [filEstado, setFilEstado] = React.useState('TODOS'); // filtro de vista
   const [sel, setSel] = React.useState({});
   const [modal, setModal] = React.useState(null); // 'nuevo' | 'evento' | 'importar' | 'ver'
   const [editando, setEditando] = React.useState(null);
@@ -566,12 +678,18 @@ const AdminCertificados = ({ toast }) => {
   }, []);
   React.useEffect(() => { recargar(); }, [recargar]);
 
+  const nAnulados = React.useMemo(() => items.filter(certEsAnulado).length, [items]);
+
   const filtrados = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter(c => [c.nombres, c.dni, c.actividad, c.comite, c.codigo, c.rol]
-      .some(v => String(v || '').toLowerCase().indexOf(q) >= 0));
-  }, [items, busca]);
+    return items.filter(c => {
+      if (filEstado === 'ANULADO' && !certEsAnulado(c)) return false;
+      if (filEstado === 'VIGENTE' && certEsAnulado(c)) return false;
+      if (!q) return true;
+      return [c.nombres, c.dni, c.actividad, c.comite, c.codigo, c.rol]
+        .some(v => String(v || '').toLowerCase().indexOf(q) >= 0);
+    });
+  }, [items, busca, filEstado]);
 
   const seleccionados = React.useMemo(
     () => filtrados.filter(c => sel[c.id]),
@@ -621,58 +739,73 @@ const AdminCertificados = ({ toast }) => {
     } catch (e) { toast.push(e.message || 'No se pudo encolar', 'error'); }
   };
 
+  const marcar = (c, on) => setSel(s => { const n = { ...s }; if (on) n[c.id] = true; else delete n[c.id]; return n; });
+  const cerrarEdicion = () => { setModal(null); setEditando(null); };
+  const acciones = (
+    <>
+      <button className="btn btn-secondary" onClick={() => { setEditando({ rol: 'PARTICIPANTE' }); setModal('nuevo'); }}>
+        <Icon name="plus" size={15} /> Nuevo
+      </button>
+      <button className="btn btn-secondary" onClick={() => setModal('importar')}>
+        <Icon name="upload" size={15} /> Importar lista
+      </button>
+      <button className="btn btn-primary" onClick={() => setModal('evento')}>
+        <Icon name="calendar" size={15} /> Emitir desde evento
+      </button>
+    </>
+  );
+
   return (
     <>
-      <div className="flex justify-between items-center" style={{ flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
-        <input
-          className="input"
-          placeholder="Buscar por nombre, DNI, actividad o código…"
-          value={busca}
-          onChange={e => setBusca(e.target.value)}
-          style={{ maxWidth: 340 }}
-        />
-        <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
-          <button className="btn" onClick={() => { setEditando({ rol: 'PARTICIPANTE' }); setModal('nuevo'); }}>
-            <Icon name="plus" size={15} /> Nuevo
-          </button>
-          <button className="btn" onClick={() => setModal('importar')}>
-            <Icon name="edit" size={15} /> Importar lista
-          </button>
-          <button className="btn btn-primary" onClick={() => setModal('evento')}>
-            <Icon name="calendar" size={15} /> Emitir desde evento
-          </button>
-        </div>
-      </div>
+      <AxHead title="Certificados" count={cargando ? null : items.length}
+        desc="Emite desde la asistencia de un evento o pega una lista de Excel. Cada certificado lleva un código y un QR verificables.">
+        {acciones}
+      </AxHead>
 
-      {seleccionados.length > 0 && (
-        <div className="card" style={{ padding: '12px 18px', marginBottom: 14, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <b style={{ fontSize: 14 }}>{seleccionados.length} seleccionados</b>
-          <button className="btn" onClick={() => imprimir(seleccionados)}>
-            <Icon name="download" size={14} /> Imprimir / PDF
-          </button>
-          <button className="btn" onClick={enviarCorreos}>
-            <Icon name="mail" size={14} /> Enviar por correo
-          </button>
-          <button className="btn" onClick={() => setSel({})}>Limpiar</button>
-        </div>
-      )}
-
-      {fallo && <div className="card" style={{ padding: 20, color: 'var(--red)' }}>{fallo}</div>}
+      {fallo && <AxFallo msg={fallo} onRetry={recargar} />}
 
       {cargando ? (
-        <div className="card" style={{ padding: 32, color: 'var(--fg-muted)' }}>Cargando certificados…</div>
-      ) : !filtrados.length ? (
-        <div className="card" style={{ padding: 32, color: 'var(--fg-muted)' }}>
-          {items.length ? 'Ningún certificado coincide con la búsqueda.' : 'Todavía no hay certificados emitidos. Empieza con “Emitir desde evento” o “Importar lista”.'}
-        </div>
+        <AxSkeleton />
+      ) : !items.length ? (
+        !fallo && (
+          <AxEmpty img="mascota-certificado" title="Todavía no hay certificados emitidos"
+            action={<button className="btn btn-primary" onClick={() => setModal('evento')}><Icon name="calendar" size={15} /> Emitir desde evento</button>}>
+            Empieza con “Emitir desde evento” o “Importar lista”.
+          </AxEmpty>
+        )
       ) : (
-        <div className="card" style={{ padding: 0, overflow: 'auto' }}>
-          <table className="admin-table" style={{ width: '100%' }}>
+        <>
+          <AxToolbar>
+            <AxSearch value={busca} onChange={setBusca} placeholder="Buscar por nombre, DNI, actividad o código" />
+            <AxChips value={filEstado} onChange={setFilEstado} opts={[
+              { v: 'TODOS', l: 'Todos', n: items.length },
+              { v: 'VIGENTE', l: 'Vigentes', n: items.length - nAnulados },
+              { v: 'ANULADO', l: 'Anulados', n: nAnulados },
+            ]} />
+          </AxToolbar>
+
+          {seleccionados.length > 0 && (
+            <div className="ax-selbar" role="region" aria-label="Acciones sobre la selección">
+              <span className="ax-selbar-n"><span className="mono">{seleccionados.length}</span> seleccionados</span>
+              <div className="ax-selbar-btns">
+                <button className="btn btn-primary btn-sm" onClick={() => imprimir(seleccionados)}>
+                  <Icon name="download" size={14} /> Imprimir / PDF
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={enviarCorreos}>
+                  <Icon name="mail" size={14} /> Enviar por correo
+                </button>
+                <button className="btn btn-text btn-sm" onClick={() => setSel({})}>Limpiar</button>
+              </div>
+            </div>
+          )}
+
+          <AxTable>
             <thead>
               <tr>
-                <th style={{ width: 36 }}>
+                <th className="ax-th-check">
                   <input
                     type="checkbox"
+                    aria-label="Marcar todos"
                     checked={todosMarcados}
                     onChange={e => {
                       const n = { ...sel };
@@ -681,74 +814,85 @@ const AdminCertificados = ({ toast }) => {
                     }}
                   />
                 </th>
-                <th>Código</th>
-                <th>Nombre</th>
-                <th>DNI</th>
+                <th>Titular</th>
                 <th>Actividad</th>
-                <th>Tipo</th>
                 <th>Comité</th>
                 <th>Rol</th>
                 <th>Fecha</th>
                 <th>Estado</th>
-                <th style={{ width: 130 }}></th>
+                <th className="ax-th-act">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {filtrados.map(c => (
-                <tr key={c.id} style={{ opacity: String(c.estado).toUpperCase() === 'ANULADO' ? 0.55 : 1 }}>
-                  <td>
-                    <input type="checkbox" checked={!!sel[c.id]}
-                      onChange={e => setSel(s => { const n = { ...s }; if (e.target.checked) n[c.id] = true; else delete n[c.id]; return n; })} />
-                  </td>
-                  <td className="mono small">{c.codigo}</td>
-                  <td style={{ fontWeight: 500 }}>{c.nombres}</td>
-                  <td className="mono small">{c.dni}</td>
-                  <td style={{ maxWidth: 260 }}>{c.actividad}</td>
-                  <td className="small">{certEsColaborativa(c.tipo_actividad) ? 'Colaborativa' : 'SOCIEM'}</td>
-                  <td className="small">{c.comite}</td>
-                  <td className="small">{c.rol}</td>
-                  <td className="small">{certFechaCorta(c.fecha)}</td>
-                  <td>
-                    <span className="badge" style={String(c.estado).toUpperCase() === 'ANULADO'
-                      ? { background: '#FAEAEA', color: '#8C2121', borderColor: '#F0BBBB' }
-                      : { background: '#E8F5EC', color: '#1F6B3A', borderColor: '#C8E6CD' }}>
-                      <span className="badge-dot" />{c.estado || 'EMITIDO'}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="flex gap-2">
-                      <button className="icon-btn" title="Ver" onClick={() => { setVerCert(c); setModal('ver'); }}><Icon name="search" size={14} /></button>
-                      <button className="icon-btn" title="Editar" onClick={() => { setEditando({ ...c }); setModal('nuevo'); }}><Icon name="edit" size={14} /></button>
-                      {String(c.estado).toUpperCase() === 'ANULADO'
-                        ? <button className="icon-btn" title="Reactivar" onClick={() => reactivar(c)}><Icon name="check" size={14} /></button>
-                        : <button className="icon-btn" title="Anular" onClick={() => anular(c)}><Icon name="trash" size={14} /></button>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {filtrados.length === 0 && (
+                <tr className="ax-row-empty"><td colSpan={8}>
+                  Ningún certificado coincide con la búsqueda. <button type="button" className="ax-linkbtn" onClick={() => { setBusca(''); setFilEstado('TODOS'); }}>Quitar filtros</button>
+                </td></tr>
+              )}
+              {filtrados.map(c => {
+                const anul = certEsAnulado(c);
+                return (
+                  <tr key={c.id} className={(anul ? 'is-anulado' : '') + (sel[c.id] ? ' is-active' : '')}>
+                    <td className="ax-td-check">
+                      <input type="checkbox" aria-label={'Marcar ' + (c.nombres || c.codigo)} checked={!!sel[c.id]}
+                        onChange={e => marcar(c, e.target.checked)} />
+                    </td>
+                    <td>
+                      <div className="ax-cell-txt">
+                        <strong>{c.nombres}</strong>
+                        <span className="adm-cell-sub mono">{c.codigo}{c.dni ? ' · ' + c.dni : ''}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="ax-cell-txt">
+                        <span className="ax-clamp">{c.actividad}</span>
+                        <span className="adm-cell-sub">{certEsColaborativa(c.tipo_actividad) ? 'Colaborativa' : 'Solo SOCIEM'}{c.valido_por ? ' · ' + c.valido_por : ''}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="ax-comites">
+                        {certComites(c.comite).slice(0, 3).map(k => <span key={k} className="comite-chip">{k}</span>)}
+                        {certComites(c.comite).length > 3 && <span className="adm-cell-sub">+{certComites(c.comite).length - 3}</span>}
+                      </div>
+                    </td>
+                    <td><span className="badge">{c.rol || 'PARTICIPANTE'}</span></td>
+                    <td className="mono ax-fecha">{certFechaCorta(c.fecha)}</td>
+                    <td><AxEstado value={c.estado || 'EMITIDO'} /></td>
+                    <td className="ax-td-act">
+                      <div className="adm-actions">
+                        <AxIconBtn icon="eye" label="Ver certificado" onClick={() => { setVerCert(c); setModal('ver'); }} />
+                        <AxIconBtn icon="edit" label="Editar" onClick={() => { setEditando({ ...c }); setModal('nuevo'); }} />
+                        {anul
+                          ? <AxIconBtn icon="refresh" label="Reactivar" onClick={() => reactivar(c)} />
+                          : <AxIconBtn icon="trash" label="Anular" tone="danger" onClick={() => anular(c)} />}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
-          </table>
-        </div>
+          </AxTable>
+        </>
       )}
 
       {/* Alta / edición individual */}
       <AdminModal
         open={modal === 'nuevo'}
-        onClose={() => { setModal(null); setEditando(null); }}
+        onClose={cerrarEdicion}
         title={editando && editando.id ? 'Editar certificado' : 'Nuevo certificado'}
         wide
         footer={<>
-          <button className="btn" onClick={() => { setModal(null); setEditando(null); }}>Cancelar</button>
+          <button className="btn btn-secondary" onClick={cerrarEdicion}>Cancelar</button>
           <button className="btn btn-primary" onClick={guardarUno} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar'}</button>
         </>}
       >
         {editando && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 18px' }}>
+          <div className="adm-form-grid">
             <AdminField label="Nombre y apellidos" span>
               <input className="input" value={editando.nombres || ''} onChange={e => setEditando({ ...editando, nombres: e.target.value })} />
             </AdminField>
             <AdminField label="DNI">
-              <input className="input" value={editando.dni || ''} onChange={e => setEditando({ ...editando, dni: e.target.value })} maxLength={12} />
+              <input className="input mono" value={editando.dni || ''} onChange={e => setEditando({ ...editando, dni: e.target.value })} maxLength={12} inputMode="numeric" />
             </AdminField>
             <AdminField label="Fecha de la actividad" hint="dd/mm/aaaa, aaaa-mm-dd o texto libre para rangos">
               <input className="input" value={editando.fecha || ''} onChange={e => setEditando({ ...editando, fecha: e.target.value })} />
@@ -774,7 +918,7 @@ const AdminCertificados = ({ toast }) => {
             <AdminField label="Válido por" hint="Ej.: 5 Puntos IFMSA · 8 horas académicas">
               <input className="input" value={editando.valido_por || ''} onChange={e => setEditando({ ...editando, valido_por: e.target.value })} />
             </AdminField>
-            <AdminField label="Email" hint="Para el envío del certificado">
+            <AdminField label="Email" hint="Para el envío del certificado" span>
               <input className="input" value={editando.email || ''} onChange={e => setEditando({ ...editando, email: e.target.value })} />
             </AdminField>
             {editando.codigo && (
@@ -808,11 +952,19 @@ const AdminCertificados = ({ toast }) => {
         title={verCert ? verCert.codigo : ''}
         wide
         footer={<>
-          <button className="btn" onClick={() => { setModal(null); setVerCert(null); }}>Cerrar</button>
+          <button className="btn btn-secondary" onClick={() => { setModal(null); setVerCert(null); }}>Cerrar</button>
           <button className="btn btn-primary" onClick={() => imprimir([verCert])}><Icon name="download" size={15} /> Imprimir / PDF</button>
         </>}
       >
-        {verCert && <CertEscala><CertificadoHoja cert={verCert} cfg={cfg} /></CertEscala>}
+        {verCert && (
+          <>
+            <div className="ax-ver-head">
+              <div className="ax-cell-txt"><strong>{verCert.nombres}</strong><span className="adm-cell-sub">{verCert.actividad}</span></div>
+              <AxEstado value={verCert.estado || 'EMITIDO'} />
+            </div>
+            <CertMesa cert={verCert} cfg={cfg} compacta />
+          </>
+        )}
       </AdminModal>
 
       <CertPrintPortal certs={cola} cfg={cfg} />
@@ -857,13 +1009,13 @@ const CertEmitirEvento = ({ onClose, onListo, toast }) => {
       title="Emitir certificados desde un evento"
       wide
       footer={<>
-        <button className="btn" onClick={onClose}>Cancelar</button>
+        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
         <button className="btn btn-primary" onClick={emitir} disabled={emitiendo || !form.evento_id}>
-          {emitiendo ? 'Emitiendo…' : 'Emitir'}
+          <Icon name="medal" size={15} /> {emitiendo ? 'Emitiendo…' : 'Emitir'}
         </button>
       </>}
     >
-      <p className="small" style={{ color: 'var(--fg-muted)', marginTop: 0, lineHeight: 1.55 }}>
+      <p className="ax-lead">
         Toma la lista de asistencia del evento y crea un certificado por persona.
         Por defecto solo entran quienes tienen <b>entrada y salida validadas</b> —
         es decir, quienes rindieron el pretest y el postest o pasaron lista dos veces.
@@ -872,7 +1024,7 @@ const CertEmitirEvento = ({ onClose, onListo, toast }) => {
 
       <AdminField label="Evento">
         {cargando
-          ? <div className="small" style={{ color: 'var(--fg-muted)' }}>Cargando eventos…</div>
+          ? <div className="skeleton ax-skel-input" aria-label="Cargando eventos" />
           : (
             <select className="input" value={form.evento_id} onChange={e => setForm({ ...form, evento_id: e.target.value })}>
               <option value="">— Elige un evento —</option>
@@ -886,15 +1038,16 @@ const CertEmitirEvento = ({ onClose, onListo, toast }) => {
       </AdminField>
 
       {ev && (
-        <div style={{ background: 'var(--bg-soft)', padding: '12px 16px', borderRadius: 10, marginBottom: 14, fontSize: 13.5, lineHeight: 1.6 }}>
-          <b>{ev.titulo}</b><br />
-          <span style={{ color: 'var(--fg-muted)' }}>
-            {[certFecha(ev.fecha), ev.comite_organizador, ev.modalidad].filter(Boolean).join(' · ')}
-          </span>
+        <div className="ax-evento-elegido">
+          <AxThumb src={ev.flyer_url && typeof IMG === 'function' ? IMG(ev.flyer_url) : ''} icon="calendar" />
+          <div className="ax-cell-txt">
+            <strong>{ev.titulo}</strong>
+            <span className="adm-cell-sub">{[certFecha(ev.fecha), ev.comite_organizador, ev.modalidad].filter(Boolean).join(' · ')}</span>
+          </div>
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 18px' }}>
+      <div className="adm-form-grid">
         <AdminField label="Rol de los asistentes">
           <select className="input" value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })}>
             {CERT_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
@@ -911,18 +1064,15 @@ const CertEmitirEvento = ({ onClose, onListo, toast }) => {
         </AdminField>
       </div>
 
-      <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13.5, marginTop: 4, cursor: 'pointer' }}>
+      <label className="ax-check-row">
         <input
           type="checkbox"
           checked={form.incluir_no_validados === 'SI'}
           onChange={e => setForm({ ...form, incluir_no_validados: e.target.checked ? 'SI' : 'NO' })}
-          style={{ marginTop: 3 }}
         />
         <span>
           Incluir también a quienes <b>no</b> completaron las dos validaciones
-          <span className="small" style={{ display: 'block', color: 'var(--fg-muted)' }}>
-            Úsalo solo si la asistencia se controló fuera del sistema.
-          </span>
+          <span className="adm-hint">Úsalo solo si la asistencia se controló fuera del sistema.</span>
         </span>
       </label>
     </AdminModal>
@@ -968,13 +1118,13 @@ const CertImportar = ({ onClose, onListo, toast }) => {
       title="Importar lista de certificados"
       wide
       footer={<>
-        <button className="btn" onClick={onClose}>Cancelar</button>
+        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
         <button className="btn btn-primary" onClick={importar} disabled={subiendo || !filasFinales.length}>
-          {subiendo ? 'Importando…' : `Importar ${filasFinales.length || ''}`}
+          <Icon name="upload" size={15} /> {subiendo ? 'Importando…' : `Importar ${filasFinales.length || ''}`}
         </button>
       </>}
     >
-      <p className="small" style={{ color: 'var(--fg-muted)', marginTop: 0, lineHeight: 1.55 }}>
+      <p className="ax-lead">
         Copia las filas desde Excel y pégalas aquí. Se reconocen las columnas
         <b> NOMBRES Y APELLIDOS · FECHA · DNI · ACTIVIDAD · SOLO SOCIEM O COLABORATIVA ·
         COMITÉ · ROL · VÁLIDO POR</b> (más EMAIL y OBSERVACIÓN). Si pegas sin fila
@@ -983,21 +1133,18 @@ const CertImportar = ({ onClose, onListo, toast }) => {
 
       <AdminField label="Pega aquí la lista">
         <textarea
-          className="input"
+          className="input ax-mono-area"
           rows={8}
           value={texto}
           onChange={e => setTexto(e.target.value)}
           placeholder={'NOMBRES Y APELLIDOS\tFECHA\tDNI\tACTIVIDAD\tSOLO SOCIEM O COLABORATIVA\tCOMITÉ\tROL\tVÁLIDO POR\nMaría Quispe Mamani\t12/09/2026\t72345678\tTaller de sutura\tSOLO SOCIEM\tSCOME\tPARTICIPANTE\t5 Puntos IFMSA'}
-          style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, lineHeight: 1.6, whiteSpace: 'pre', overflowX: 'auto' }}
         />
       </AdminField>
 
-      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginTop: 4 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Valores para toda la lista</div>
-        <div className="small" style={{ color: 'var(--fg-muted)', marginBottom: 12 }}>
-          Se aplican solo a las filas que no traigan ese dato.
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 18px' }}>
+      <div className="adm-fieldset ax-fs ax-mt2">
+        <div className="adm-fieldset-title">Valores para toda la lista</div>
+        <div className="adm-hint ax-mb">Se aplican solo a las filas que no traigan ese dato.</div>
+        <div className="adm-form-grid">
           <AdminField label="Actividad" span>
             <input className="input" value={comunes.actividad} onChange={e => setComunes({ ...comunes, actividad: e.target.value })} />
           </AdminField>
@@ -1020,48 +1167,47 @@ const CertImportar = ({ onClose, onListo, toast }) => {
               {CERT_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </AdminField>
-          <AdminField label="Válido por">
+          <AdminField label="Válido por" span>
             <input className="input" value={comunes.valido_por} onChange={e => setComunes({ ...comunes, valido_por: e.target.value })} placeholder="8 horas académicas" />
           </AdminField>
         </div>
       </div>
 
       {texto.trim() && (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-            Vista previa · {filasFinales.length} fila(s)
-            {parsed.conCabecera ? ' · cabecera detectada' : ' · sin cabecera, orden por defecto'}
+        <div className="ax-preview">
+          <div className="ax-preview-head">
+            <span className="adm-overline">Vista previa</span>
+            <span className="badge badge-violet">{filasFinales.length} fila(s)</span>
+            <span className={'badge ' + (parsed.conCabecera ? 'badge-green' : 'badge-warn')}>
+              {parsed.conCabecera ? 'Cabecera detectada' : 'Sin cabecera · orden por defecto'}
+            </span>
           </div>
           {sinActividad > 0 && (
-            <div style={{ padding: '10px 14px', borderRadius: 8, background: '#FAEAEA', color: '#8C2121', fontSize: 13, marginBottom: 10 }}>
-              Falta la actividad en {sinActividad} fila(s). Complétala arriba en “Valores para toda la lista”.
+            <div className="adm-error">
+              <Icon name="close" size={14} /> Falta la actividad en {sinActividad} fila(s). Complétala arriba en “Valores para toda la lista”.
             </div>
           )}
-          <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
-            <table className="admin-table" style={{ width: '100%', fontSize: 12.5 }}>
-              <thead>
-                <tr><th>Nombre</th><th>Fecha</th><th>DNI</th><th>Actividad</th><th>Tipo</th><th>Comité</th><th>Rol</th><th>Válido por</th></tr>
-              </thead>
-              <tbody>
-                {filasFinales.slice(0, 40).map((f, i) => (
-                  <tr key={i}>
-                    <td>{f.nombres}</td>
-                    <td className="small">{f.fecha}</td>
-                    <td className="mono small">{f.dni}</td>
-                    <td className="small">{f.actividad}</td>
-                    <td className="small">{certEsColaborativa(f.tipo_actividad) ? 'Colaborativa' : 'SOCIEM'}</td>
-                    <td className="small">{f.comite}</td>
-                    <td className="small">{f.rol || 'PARTICIPANTE'}</td>
-                    <td className="small">{f.valido_por}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <AxTable compact>
+            <thead>
+              <tr><th>Nombre</th><th>Fecha</th><th>DNI</th><th>Actividad</th><th>Tipo</th><th>Comité</th><th>Rol</th><th>Válido por</th></tr>
+            </thead>
+            <tbody>
+              {filasFinales.slice(0, 40).map((f, i) => (
+                <tr key={i} className={!String(f.actividad || '').trim() ? 'is-falta' : ''}>
+                  <td>{f.nombres}</td>
+                  <td className="mono">{f.fecha}</td>
+                  <td className="mono">{f.dni}</td>
+                  <td>{f.actividad || <span className="ax-falta">falta</span>}</td>
+                  <td>{certEsColaborativa(f.tipo_actividad) ? 'Colaborativa' : 'SOCIEM'}</td>
+                  <td>{f.comite}</td>
+                  <td>{f.rol || 'PARTICIPANTE'}</td>
+                  <td>{f.valido_por}</td>
+                </tr>
+              ))}
+            </tbody>
+          </AxTable>
           {filasFinales.length > 40 && (
-            <div className="small" style={{ color: 'var(--fg-muted)', marginTop: 6 }}>
-              …y {filasFinales.length - 40} más.
-            </div>
+            <div className="caption ax-mt">…y {filasFinales.length - 40} más.</div>
           )}
         </div>
       )}
