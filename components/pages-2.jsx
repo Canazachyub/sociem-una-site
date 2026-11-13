@@ -1782,7 +1782,9 @@ const AdminSectionUsuarios = ({ toast }) => {
   React.useEffect(() => { reload(); }, []);
   const save = async () => {
     try {
-      const action = editing.id ? 'usuarioUpdate' : 'usuarioCreate';
+      // AdminCtrl atiende el alta/edición de usuarios como create/update
+      // (usuarioCreate/usuarioUpdate respondían ACCION_INVALIDA).
+      const action = editing.id ? 'update' : 'create';
       await adminApi.post('admin', action, editing);
       toast.push(editing.id?'Usuario actualizado':'Usuario creado','ok');
       setEditing(null); reload();
@@ -1853,7 +1855,7 @@ const AdminSectionUsuarios = ({ toast }) => {
               </AdminField>
             )}
             <AdminField label="Activo">
-              <label className="adm-switch"><input type="checkbox" checked={editing.activo !== false} onChange={e=>setEditing({...editing, activo:e.target.checked})} /><span>Habilitado</span></label>
+              <label className="adm-switch"><input type="checkbox" checked={editing.activo === undefined || editing.activo === true || /^(SI|TRUE|1|X)$/i.test(String(editing.activo))} onChange={e=>setEditing({...editing, activo:e.target.checked ? 'SI' : 'NO'})} /><span>Habilitado</span></label>
             </AdminField>
           </div>
         )}
