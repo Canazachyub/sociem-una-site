@@ -400,10 +400,10 @@ const ContactoPage = () => {
 // Login real contra Apps Script (route=auth&action=login). El usuario
 // "admin" por defecto y su password se generan al ejecutar
 // bootstrap_admin() en el editor de Apps Script (te llega por mail).
-const AdminLogin = ({ onLogin }) => {
+const AdminLogin = ({ onLogin, aviso }) => {
   const [user, setUser] = React.useState('admin');
   const [pass, setPass] = React.useState('');
-  const [error, setError] = React.useState('');
+  const [error, setError] = React.useState(aviso || '');
   const [loading, setLoading] = React.useState(false);
   const [showPass, setShowPass] = React.useState(false);
   const [mayus, setMayus] = React.useState(false);
@@ -547,9 +547,15 @@ const CONSEJOS_OPCIONES = [
 // en "Guardar" o "Eliminar" reutiliza la petición pendiente en vez de
 // disparar un POST duplicado al backend.
 const _postsEnVuelo = {};
+// Token vencido (8 h en el backend) o reemplazado por un login en otro
+// dispositivo: AdminPage escucha este evento y vuelve al login.
+const adminSesionExpirada = (r) => {
+  if (r && r.code === 'NO_AUTORIZADO') window.dispatchEvent(new Event('sociem:sesion-expirada'));
+};
 const adminApi = {
   async get(route, action, params) {
     const r = await window.SOCIEM_API.get(route, action, params);
+    adminSesionExpirada(r);
     if (!r || r.ok === false) {
       const err = new Error((r && r.error) || 'Sin respuesta del servidor');
       err.code = r && r.code; throw err;
@@ -562,6 +568,7 @@ const adminApi = {
     _postsEnVuelo[clave] = (async () => {
       try {
         const r = await window.SOCIEM_API.post(route, action, body);
+        adminSesionExpirada(r);
         if (!r || r.ok === false) {
           const err = new Error((r && r.error) || 'Sin respuesta del servidor');
           err.code = r && r.code; throw err;
@@ -2019,15 +2026,25 @@ const AdminPage = () => {
   const initialUser = (typeof window !== 'undefined' && window.SOCIEM_API && window.SOCIEM_API.currentUser)
     ? window.SOCIEM_API.currentUser() : null;
   const [user, setUser] = React.useState(initialUser);
+  const [aviso, setAviso] = React.useState('');
 
   const handleLogout = () => {
     if (window.SOCIEM_API && window.SOCIEM_API.logout) window.SOCIEM_API.logout();
     setUser(null);
   };
 
+  React.useEffect(() => {
+    const expira = () => {
+      handleLogout();
+      setAviso('Tu sesión expiró. Vuelve a iniciar sesión para continuar.');
+    };
+    window.addEventListener('sociem:sesion-expirada', expira);
+    return () => window.removeEventListener('sociem:sesion-expirada', expira);
+  }, []);
+
   return user
     ? <AdminDashboard onLogout={handleLogout} user={user} />
-    : <AdminLogin onLogin={(u) => setUser(u || { username: 'admin' })} />;
+    : <AdminLogin aviso={aviso} onLogin={(u) => { setAviso(''); setUser(u || { username: 'admin' }); }} />;
 };
 
 Object.assign(window, { MiembrosPage, ActividadesPage, ContactoPage, AdminPage });
